@@ -6,3 +6,7 @@ packrat/
 *.csv
 *.tsv
 packrat/lib*/
+*.RDS
+*.xlsx
+*.xls
+results

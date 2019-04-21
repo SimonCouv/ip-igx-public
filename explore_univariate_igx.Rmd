@@ -157,7 +157,7 @@ glycans <- fread(here("input_data/glycans_corrected_20190409.csv"))
 glycans_raw <- fread(here("input_data/glycans_raw.csv"))
 
 # IPs
-ips <- fread(here("input_data/immunopheno.corrected"))
+ips <- fread(here("input_data/immunopheno.corrected.csv"))
 
 #Popante output
 ip_igx_univar <- fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
