@@ -1,0 +1,7 @@
+packrat/
+.Rproj.user
+*.gz
+*.zip
+.Rhistory
+*.csv
+*.tsv

@@ -277,9 +277,9 @@ IgA_names_univar_derived <- IgA_names_univar[72:99]
 #raw
 # note: in input/results raw names are coded as e.g. HYT1H2N5F0S2 while in anno they are HYT_H2N5F0S2
 setdiff(IgA_anno_names_raw$feature %>% str_replace("_","1"), IgA_names_univar_raw) %>% 
-  writeLines(.,"anno_raw_noresult.txt")
+  writeLines(., glue("{resultdir}/anno_raw_noresult.txt"))
 setdiff(IgA_names_univar_raw, IgA_anno_names_raw$feature %>% str_replace("_","1")) %>% 
-  writeLines(.,"result_raw_no_anno.txt")
+  writeLines(.,glue("{resultdir}/result_raw_no_anno.txt"))
 
 #derived
 # note: derived names have same coding in all sets
