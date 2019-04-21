@@ -5,3 +5,4 @@ packrat/
 .Rhistory
 *.csv
 *.tsv
+packrat/lib*/

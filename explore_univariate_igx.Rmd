@@ -27,10 +27,10 @@ library(citr)
 library(GGally)
 library(sjPlot)
 
-figdir <- "/home/simon/OneDrive/KCL/Falchi/results/figures"
-cluster_pars_dir <- "/home/simon/OneDrive/KCL/Falchi/ip-igx/WGCNA_parameters"
-datadir <- "/home/simon/OneDrive/KCL/Falchi/data"
-resultdir <- "/home/simon/OneDrive/KCL/Falchi/results"
+figdir <- here("results/figures")
+resultdir <- here("results")
+cluster_pars_dir <- here("WGCNA_parameters")
+datadir <- here("data")
 
 
 ```
@@ -132,8 +132,8 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 
 ```{r remove-error-lines}
 # 
-# f <- file("/home/simon/OneDrive/KCL/Falchi/input_data/glycans_20190409_immunopheno_corrected.tsv.gz", open="r")
-# o <- file("/home/simon/OneDrive/KCL/Falchi/input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv.gz", open = "a")
+# f <- file(here("input_data/glycans_20190409_immunopheno_corrected.tsv.gz"), open="r")
+# o <- file(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv.gz"), open = "a")
 # i <- 1
 # 
 # while (TRUE){
@@ -152,25 +152,25 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 ```{r read-data}
 
 # glycans
-glycans <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/glycans_corrected_20190409.csv")
+glycans <- fread(here("input_data/glycans_corrected_20190409.csv"))
 
-glycans_raw <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/glycans_raw.csv")
+glycans_raw <- fread(here("input_data/glycans_raw.csv"))
 
 # IPs
-ips <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/immunopheno.corrected")
+ips <- fread(here("input_data/immunopheno.corrected"))
 
 #Popante output
-ip_igx_univar <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv", header = TRUE) %>%
+ip_igx_univar <- fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
   set_names(names(.) %>% tolower(.) %>% str_replace_all(., c("\\^"="", "[\\.]+"="_")))
 
 
 # annotations
-ip_anno <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/data_annotations/all_immunophenotypes_annotation_av.csv") %>%
+ip_anno <- fread(here("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
   set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
   mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage))
-IgA_anno_names_raw <- readxl::read_xlsx("/home/simon/OneDrive/KCL/Falchi/input_data/data_annotations/IgA_explanatory_overview.xlsx", sheet = "raw_names")
-IgA_anno_names_derived <- readxl::read_xlsx("/home/simon/OneDrive/KCL/Falchi/input_data/data_annotations/IgA_explanatory_overview.xlsx", sheet = "derived_names")
-twin_fam <- fread("/home/simon/OneDrive/KCL/Falchi/input_data/data_annotations/TwinDetails_110119.csv")
+IgA_anno_names_raw <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names")
+IgA_anno_names_derived <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names")
+twin_fam <- fread(here("input_data/data_annotations/TwinDetails_110119.csv"))
 
 
 
