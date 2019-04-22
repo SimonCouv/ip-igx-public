@@ -1,8 +1,26 @@
 ---
 title: "explore_univariate_igx"
-author: "Simon Couvreur"
-date: "11/04/2019"
-output: html_document
+author: 
+  - name: "Simon Couvreur"
+    email: alice@example.com
+    affiliation: Some Institute of Technology
+    corresponding: alice@example.com
+  - name: Bob Security
+    email: bob@example.com
+    affiliation: Another University
+address:
+  - code: Some Institute of Technology
+    address: Department, Street, City, State, Zip
+  - code: Another University
+    address: Department, Street, City, State, Zip
+abstract: |
+  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eget porta erat. Morbi consectetur est vel gravida pretium. Suspendisse ut dui eu ante cursus gravida non sed sem. Nullam sapien tellus, commodo id velit id, eleifend volutpat quam. Phasellus mauris velit, dapibus finibus elementum vel, pulvinar non tellus. Nunc pellentesque pretium diam, quis maximus dolor faucibus id. Nunc convallis sodales ante, ut ullamcorper est egestas vitae. Nam sit amet enim ultrices, ultrices elit pulvinar, volutpat risus.
+  
+author_summary: |
+  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eget porta erat. Morbi consectetur est vel gravida pretium. Suspendisse ut dui eu ante cursus gravida non sed sem. Nullam sapien tellus, commodo id velit id, eleifend volutpat quam. Phasellus mauris velit, dapibus finibus elementum vel, pulvinar non tellus. Nunc pellentesque pretium diam, quis maximus dolor faucibus id. Nunc convallis sodales ante, ut ullamcorper est egestas vitae. Nam sit amet enim ultrices, ultrices elit pulvinar, volutpat risus.
+  
+output: rticles::plos_article
+csl: plos.csl
 editor_options: 
   chunk_output_type: console
 ---
@@ -26,6 +44,7 @@ library(igraph)
 library(citr)
 library(GGally)
 library(sjPlot)
+library(here)
 
 figdir <- here("results/figures")
 resultdir <- here("results")
@@ -152,76 +171,54 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 ```{r read-data}
 
 # glycans
-glycans <- fread(here("input_data/glycans_corrected_20190409.csv"))
-
-glycans_raw <- fread(here("input_data/glycans_raw.csv"))
+glycans <- readd(glycans)
+glycans_raw <- readd(glycans_raw)
 
 # IPs
-ips <- fread(here("input_data/immunopheno.corrected.csv"))
+ips <- readd(ips)
 
 #Popante output
-ip_igx_univar <- fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
-  set_names(names(.) %>% tolower(.) %>% str_replace_all(., c("\\^"="", "[\\.]+"="_")))
+ip_igx_univar <- readd(ip_igx_univar)
 
 
 # annotations
-ip_anno <- fread(here("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
-  set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
-  mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage))
-IgA_anno_names_raw <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names")
-IgA_anno_names_derived <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names")
-twin_fam <- fread(here("input_data/data_annotations/TwinDetails_110119.csv"))
+ip_anno <- readd(ip_anno)
+IgA_anno_names_raw <- readd(IgA_anno_names_raw)
+IgA_anno_names_derived <- readd(IgA_anno_names_derived)
+twin_fam <-readd(twin_fam)
 
-
-
-# head(ip_igx_univar)
 ```
 
 ## data preprocessing
 
 ```{r QC-filter}
-ip_igx_univar <- ip_igx_univar %>%
-  # dplyr::select(predictor) %>% 
-  left_join(dplyr::select(ip_anno, set_name, robust_mario_qc), by=c("predictor"="set_name")) %>%
-  dplyr::filter(robust_mario_qc == "Good") %>%
-  dplyr::select(-robust_mario_qc)
+
+ip_igx_univar_good <- readd(ip_igx_univar_good)
 
 good_ips <- ip_anno$set_name[ip_anno$robust_mario_qc == "Good"] %>% na.omit()
 ips_qc <- ips %>%
   dplyr::select(!!good_ips)
-```
 
-
-
-```{r fdr}
-ip_igx_univar <- ip_igx_univar %>%
-  mutate(pv_adj_global = p.adjust(pvalue, method = "BH")) %>%
-  arrange(pvalue)
-
-
-  
 ```
 
 
 # Quality control
 
-```{r qqplot}
-# qq <- qqmath(x = ip_igx_univar$pvalue,
-#        distribution = qunif)
-# 
-# qqcar <- car::qqPlot(x = ip_igx_univar$pvalue,
-#                      distribution = "unif")
+drake issue: including images can be problematic. Since they are not located in the code chunks/inline code, there is no dependency being generated?
 
-png(glue("{figdir}/univar_qqplot.png"), res=600,
-    width = 6, height = 6, units = "in")
-qqman::qq(ip_igx_univar$pvalue)
-dev.off()
-# ip_igx_univar$pvalue
-```
+p-value QQ-plot:
+
+
+
+
 
 
 ```{r missing-data}
-vis_miss(glycans_raw)
+
+# `r sprintf("![](%s)", glue("{figdir}/univar_qqplot.png")`
+
+naniar::vis_miss(glycans_raw)
+
 ```
 
 
@@ -259,7 +256,7 @@ When examining set diffs (see sheet 'overview'):
 ```{r IgA-glycan-features-anno}
 
 # in univariate results
-IgA_names_univar <- unique(ip_igx_univar$response) %>% .[!str_detect(., pattern = "IgG")]
+IgA_names_univar <- unique(ip_igx_univar_good$response) %>% .[!str_detect(., pattern = "IgG")]
 
 # in corrected glycan data
 IgA_names_input <- names(glycans)[-(1:5)]  %>% .[!str_detect(., pattern = "IgG")]
@@ -292,34 +289,12 @@ length(union(IgA_names_univar_derived, IgA_anno_names_derived$feature))
 
 ### Marginal distributions
 
-```{r igx-marginal-distributions}
-names(glycans_raw)
-
-glycan_dist <- list()
-for (i in 6:ncol(glycans_raw)){
-  glycan <- names(glycans)[i]
-  print(glycan)
-  glycan_dist[[glycan]] <- histogram_n(glycans_raw, aes(x=!!ensym(glycan)))
-}
-
-
-# cowplot::plot_grid(plotlist=top_plots, ncol=min(floor(sqrt(ntop)),8))
-
-# pagination: ggforce / gridExtra
-# combine independent plots: cowplot / gridExtra
-# => paginate independent plots: gridExta
-
-# https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html#multiple-pages-output
-# https://stackoverflow.com/questions/39736655/ggplot2-plots-over-multiple-pages/51772409#51772409
-glycan_marginal_plots <- marrangeGrob(glycan_dist, ncol=4, nrow=7)
-ggplot2::ggsave(glycan_marginal_plots, filename = glue("{figdir}/glycan_marginal_plots.pdf"), width = 10, height = 16)
-
-```
+see PDF
 
 
 ## IP features
 
-### Missingness of annotation fiels
+### Missingness of annotation fields
 
 ```{r}
 gg_miss_var(ip_anno, show_pct = TRUE)
@@ -343,11 +318,11 @@ count(ip_anno, composite_lin_source) %>%
 ## Number of significant associations ~ FDR threshold
 
 ```{r n-sign-ass-FDR}
-plot(ecdf(ip_igx_univar$pv_adj_global),
+plot(ecdf(ip_igx_univar_good$pv_adj_global),
      xlab = "FDR",
      ylab = "prop associations < FDR")
 
-ip_igx_univar %>%
+ip_igx_univar_good %>%
   summarise(n_FDR20 = sum(pv_adj_global <0.2),
             n_FDR10 = sum(pv_adj_global <0.1),
             n_FDR5 = sum(pv_adj_global <0.05),
@@ -362,17 +337,17 @@ ecdf_logabs <- function(x){
   function(t){log10(e(t)*length(x))}
 }
 
-fdr20_ecdf <- ecdf_abs(ip_igx_univar$pv_adj_global %>% .[. < 0.2])
+fdr20_ecdf <- ecdf_abs(ip_igx_univar_good$pv_adj_global %>% .[. < 0.2])
 plot(fdr20_ecdf, xlim = c(0,0.2),
      xlab = "FDR",
      ylab = "n associations < FDR")
 
-fdr_ecdf <- ecdf_abs(ip_igx_univar$pv_adj_global)
+fdr_ecdf <- ecdf_abs(ip_igx_univar_good$pv_adj_global)
 plot(fdr_ecdf,
      xlab = "FDR",
      ylab = "n associations < FDR")
 
-fdr_log_ecdf <- ecdf_logabs(ip_igx_univar$pv_adj_global)
+fdr_log_ecdf <- ecdf_logabs(ip_igx_univar_good$pv_adj_global)
 plot(fdr_log_ecdf,
      xlab = "FDR",
      ylab = "log10(n associations < FDR)")
@@ -383,31 +358,8 @@ plot(fdr_log_ecdf,
 
 
 ```{r n-sign-ass-features-FDR}
-fdr_thresholds <- seq(0,1,0.01)
 
-n_associated <- list()
-for (fdr_threshold in fdr_thresholds){
-    n_associated[[as.character(fdr_threshold)]] <- ip_igx_univar %>%
-    # mutate(total_IgX = n_distinct(response),
-    #        total_IgG = unique(response) %>% str_detect(., "IgG") %>% sum(.),
-    #        total_IgA = total_IgX - total_IgG,
-    #        total_IP = n_distinct(predictor)) %>%
-    dplyr::filter(pv_adj_global < fdr_threshold) %>%
-    summarise(n_IgX = n_distinct(response),
-              n_IP = n_distinct(predictor),
-              # prop_igx = n_igx/unique(total_igx),
-              # prop_ip = n_ip/unique(total_ip),
-              n_IgG = unique(response) %>% str_detect(., "IgG") %>% sum(.),
-              n_IgA = n_IgX - n_IgG)
-}
-
-n_associated_m <- n_associated %>% 
-  bind_rows(n_associated, .id = "fdr_threshold")%>%
-  gather(key, n, -fdr_threshold) %>%
-  separate(key, into = c("type", "omic")) %>%
-  group_by(omic) %>%
-  mutate(prop=n/max(n),
-         fdr_threshold = as.numeric(fdr_threshold))
+n_associated_m <- readd(n_associated_m)
 
 ggplot(ungroup(n_associated_m), aes(x=fdr_threshold, y=prop, colour=omic))+
   geom_line()+
@@ -440,14 +392,14 @@ ggplot(iris, aes(Petal.Length, Petal.Width, colour = Species)) +
 ## Explore top associations
 
 ```{r top-associations}
-ip_igx_univar_anno <- ip_igx_univar %>%
+ip_igx_univar_good_anno <- ip_igx_univar_good %>%
   left_join(ip_anno %>% 
               dplyr::select(set_name, subset_name, composite_lin_source), 
             by=c("predictor"="set_name")) %>% 
   mutate(IgX = ifelse(str_detect(response, pattern = "IgG"), "IgG", "IgA")) %>% 
   dplyr::select(response, IgX, subset_name, composite_lin_source, everything())
 
-ip_igx_univar_anno %>%
+ip_igx_univar_good_anno %>%
   head(10000) %>% 
   count(IgX, composite_lin_source)%>%
   arrange(IgX, desc(n)) %>% 
@@ -461,11 +413,11 @@ ip_igx_univar_anno %>%
 top_plots_list <- list()
 ntop <- 100
 
-ip_igx_univar <- arrange(ip_igx_univar, pvalue)  #repeat for safety
+ip_igx_univar_good <- arrange(ip_igx_univar_good, pvalue)  #repeat for safety
 
 for (i in 1:ntop){
-  igx <- ip_igx_univar$response[i]
-  ip <- ip_igx_univar$predictor[i]
+  igx <- ip_igx_univar_good$response[i]
+  ip <- ip_igx_univar_good$predictor[i]
   igx_cols <- c("IID",igx)
   ip_cols <- c("IID",ip)
   igx_data <- glycans[, ..igx_cols]
@@ -491,8 +443,8 @@ ggplot2::ggsave(top_plots, filename = "top_plots.pdf", width = 10, height = 16)
 
 
 
-arrange(ip_igx_univar, pvalue) %>% dplyr::select(response, predictor, pvalue) %>% head(100)
-# arrange(ip_igx_univar, pv_adj_global) %>% dplyr::select(response, predictor, pv_adj_global) %>% head(100)
+arrange(ip_igx_univar_good, pvalue) %>% dplyr::select(response, predictor, pvalue) %>% head(100)
+# arrange(ip_igx_univar_good, pv_adj_global) %>% dplyr::select(response, predictor, pv_adj_global) %>% head(100)
   
 ```
 
@@ -504,7 +456,7 @@ arrange(ip_igx_univar, pvalue) %>% dplyr::select(response, predictor, pvalue) %>
 
 ```{r}
 
-ip_lin_source_enrich_overall <- ip_igx_univar_anno %>%
+ip_lin_source_enrich_overall <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
   count(composite_lin_source) %>%
   left_join(count(ip_anno, composite_lin_source),
@@ -523,7 +475,7 @@ write_csv(ip_lin_source_enrich_overall, path = glue("{resultdir}/ip_lin_source_e
 ##### By IgX
 
 ```{r}
-ip_lin_source_enrich_byIgX <- ip_igx_univar_anno %>%
+ip_lin_source_enrich_byIgX <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
   count(composite_lin_source, IgX) %>%
   left_join(count(ip_anno, composite_lin_source),
@@ -548,11 +500,11 @@ write_csv(ip_lin_source_enrich_byIgX, path = glue("{resultdir}/ip_lin_source_enr
 ```{r glycan-IgG-enrich}
 
 running_IgG_perc <- c()
-for (i in 1:nrow(ip_igx_univar)){
-  running_IgG_perc <- head(ip_igx_univar$response, i) %>% str_detect(., pattern = "IgG") %>% mean(.)
+for (i in 1:nrow(ip_igx_univar_good)){
+  running_IgG_perc <- head(ip_igx_univar_good$response, i) %>% str_detect(., pattern = "IgG") %>% mean(.)
 }
 
-running_IgG_perc <-  cummean(str_detect(ip_igx_univar$response, pattern = "IgG"))
+running_IgG_perc <-  cummean(str_detect(ip_igx_univar_good$response, pattern = "IgG"))
 
 p_IgG_enrich <- tibble(cum_IgG_perc = running_IgG_perc,
        index = 1:length(running_IgG_perc)) %>% 
@@ -578,10 +530,10 @@ target_indices <- c(1:10000,
                     seq(1e5+1,1, 1000),
                     seq(10))
 
-target_indices <- unique(floor(10^seq(0,log10(nrow(ip_igx_univar)), length.out = 1e4)))
+target_indices <- unique(floor(10^seq(0,log10(nrow(ip_igx_univar_good)), length.out = 1e4)))
 
 
-univar_top_ip_class <- ip_igx_univar %>%
+univar_top_ip_class <- ip_igx_univar_good %>%
   dplyr::select(predictor) %>%
   left_join(dplyr::select(ip_anno, set_name, composite_lin_source), by=c("predictor"="set_name"))
 
@@ -653,7 +605,7 @@ running_lin_source_IgX_prop <- list()
 cnt <- 0
 for (i in target_indices){
   if (cnt %% 100 == 0) print(glue("iter {cnt} - index {i}"))
-  running_lin_source_IgX_prop[[as.character(i)]] <-ip_igx_univar_anno %>%
+  running_lin_source_IgX_prop[[as.character(i)]] <-ip_igx_univar_good_anno %>%
     head(i) %>% 
     count(IgX, composite_lin_source) %>%
     group_by(IgX) %>% 
@@ -1129,7 +1081,7 @@ ggpair
 
 
 
-# References
+# References {#references .unnumbered}
 
 
 
