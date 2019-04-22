@@ -1,0 +1,22 @@
+---
+title: "explore association p-values"
+output: html_document
+---
+
+# Quality control
+
+drake issue: including images can be problematic. Since they are not located in the code chunks/inline code, there is no dependency being generated?
+
+p-value QQ-plot:
+
+![](results/qq.png)
+
+Now do something with some data dependency.
+
+```{r do-something}
+somedata <- readd(somedata)
+
+# do something with somedata
+mean(somedata)
+```
+
