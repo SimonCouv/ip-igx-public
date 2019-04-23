@@ -1,4 +1,4 @@
-wgcna_parameter_search <- function(network_pars, cut_pars, cross_iteration_pars, create_plot=FALSE, feat_modality=NA){
+wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration_pars, create_plot=FALSE, feat_modality=NA){
   merge_pars_used_l <- list()
   color_overview_l <- list()
   mod_modularities_l <- list()
@@ -23,10 +23,8 @@ wgcna_parameter_search <- function(network_pars, cut_pars, cross_iteration_pars,
     
     iter_network_pars <- as.list(network_pars[i,])
     list2env(iter_network_pars, envir=environment())
-    fig_path <- glue("{figdir}/{data_name}_{corfnc}_{networktype}_power{softpower}_{method}.png")
-    plt_t <- glue("[{i}]{data_name}: {corfnc}/{networktype}/power {softpower}/{method}")
-    
-    adj <- adjacency(datExpr = data,
+
+        adj <- adjacency(datExpr = data,
                      type=networktype,
                      power = softpower,
                      corFnc = corfnc)
@@ -73,14 +71,14 @@ wgcna_parameter_search <- function(network_pars, cut_pars, cross_iteration_pars,
                                      which = "row",
                                      show_legend = FALSE, 
                                      width = unit(3,"cm"),
-                                     col =  map(as.tibble(modules_df), ~define_colors(.x)),
+                                     col =  map(as_tibble(modules_df), ~define_colors(.x)),
                                      gp = gpar(col = "white", lwd = 0.5))
       
       modality_df <- data.frame(feat_modality=feat_modality)
       modality_hm <- HeatmapAnnotation(modality_df,
                                        which = "row",
                                        show_legend = TRUE,
-                                       col=map(as.tibble(modality_df), ~define_colors(.x)),
+                                       col=map(as_tibble(modality_df), ~define_colors(.x)),
                                        gp = gpar(col = "white", lwd = 0.5))
       
       core_hm <- ComplexHeatmap::Heatmap(matrix=cormat,
@@ -108,6 +106,21 @@ wgcna_parameter_search <- function(network_pars, cut_pars, cross_iteration_pars,
   color_overview <- do.call(cbind, color_overview_l) %>% set_names(glue("nw_{nw_range}_cut_{cut_range}", 
                                                                         nw_range=rep(1:nrow(network_pars), each=nrow(cut_pars)),
                                                                         cut_range=rep(1:nrow(cut_pars),nrow(network_pars))))
+  
+  # make modularity overview
+  modularity_overview <- mod_modularities_l %>%
+    map(~map(.x, ~rownames_to_column(.x) %>%
+               dplyr::filter(rowname != "grey") %>%
+               dplyr::select(-rowname) %>%
+               dplyr::summarise_all(sum)) %>%
+          dplyr::bind_rows(.id="cut_iter")) %>%
+    dplyr::bind_rows(.id="network_iter") %>%
+    dplyr::mutate(cut_iter = str_match(cut_iter, pattern = "cut_iter_([:digit:]+)")[,2]) %>%
+    dplyr::arrange(desc(adj_mod_modularities)) %>%
+    dplyr::left_join(rownames_to_column(network_pars), by=c("network_iter" = "rowname")) %>% 
+    dplyr::left_join(rownames_to_column(cut_pars), by=c("cut_iter" = "rowname"))
+  
+  
   return(list(merge_pars_used=merge_pars_used_l, color_overview=color_overview, 
-              mod_modularities = mod_modularities_l, plots=plot_l))    
+              mod_modularities = mod_modularities_l, plots=plot_l, modularity_overview=modularity_overview))    
 }

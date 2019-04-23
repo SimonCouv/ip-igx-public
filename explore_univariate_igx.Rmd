@@ -1,9 +1,16 @@
 ---
-title: "explore_univariate_igx"
+title: "IgX glycosylation - immunophenotype analysis"
 author: 
   - name: "Simon Couvreur"
   
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    code_folding: hide
+    number_sections: true
+    self_contained: yes
 editor_options: 
   chunk_output_type: console
 ---
@@ -225,7 +232,7 @@ see PDF
 
 ### Missingness of annotation fields
 
-```{r}
+```{r ip_anno_missingness}
 gg_miss_var(ip_anno, show_pct = TRUE)
 ```
 
@@ -236,7 +243,7 @@ gg_miss_var(ip_anno, show_pct = TRUE)
 - for lineage/MFI features: 'Source' column (value = 'Lin' or 'MFI')
 - 'Lineage' for all others (value=lineage on which the subset is calculated)
 
-```{r}
+```{r composite_lin_source_count}
 count(ip_anno, composite_lin_source) %>% 
   arrange(desc(n))
   # View()
@@ -330,7 +337,7 @@ see PDF
 
 ##### IP subgroup enrichment - overall
 
-```{r}
+```{r ip-enrich-overall}
 
 ip_lin_source_enrich_overall <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
@@ -350,7 +357,8 @@ write_csv(ip_lin_source_enrich_overall, path = glue("{resultdir}/ip_lin_source_e
 
 ##### IP subgroup enrichment - by IgX
 
-```{r}
+```{r ip-enrich-byIgX}
+
 ip_lin_source_enrich_byIgX <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
   count(composite_lin_source, IgX) %>%
@@ -375,7 +383,7 @@ write_csv(ip_lin_source_enrich_byIgX, path = glue("{resultdir}/ip_lin_source_enr
 
 ##### IgX subgroup enrichment
 
-```{r glycan-IgG-enrich}
+```{r glycan-IgG-enrich_cont}
 
 # running_IgG_perc <- c()
 # for (i in 1:nrow(ip_igx_univar_good)){
@@ -401,7 +409,7 @@ p_IgG_enrich <- tibble(cum_IgG_perc = running_IgG_perc,
 
 Overall:
 
-```{r ip-lin_source-enrich}
+```{r ip-lin_source-enrich_cont}
 
 lin_source_props_df <- readd(lin_source_props_df)
 
@@ -419,7 +427,7 @@ p_lin_source_enrich <- lin_source_props_df %>%
 
 By IgX:
 
-```{r lin_source-enrich-by-IgX}
+```{r lin_source-enrich-by-IgX_cont}
 
 lin_source_IgX_props_df <- readd(lin_source_IgX_props_df)
 
@@ -487,13 +495,25 @@ Rosner, R., 2016. Marginal Association Measures for Clustered Data.
 
 ## LME-residual approach
 
+### LMM assumptions
+
+From [@harrisonBriefIntroductionMixed2018]:
+
+- additivity of linear predictors
+- residuals:
+
+    - homoscedastic
+    - normal
+    - independent
+    
+
 ### Within-modality
 
 #### Glycans
 
 ##### V1: plate as mixed effect
 
-```{r}
+```{r glycan-lmer-plate-random}
 
 glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
 # gives boundary fit (see ?isSingular)
@@ -556,7 +576,7 @@ Convergence resources:
  - https://stats.stackexchange.com/questions/378939/dealing-with-singular-fit-in-mixed-models
 
 
-```{r, include=FALSE}
+```{r glycan-lmer-plate-random-troubleshoot, include=FALSE}
 # reason for boundary fit: not that FID and plate are strictly aliased
 dplyr::summarise_all(glycans_raw[,1:4],n_distinct)
 glycans_raw %>%
@@ -603,7 +623,7 @@ plate_var_overview %>%
 IgG4_A2G has only the convergence problem.
 
 
-```{r, include=FALSE}
+```{r glycan-lmer-plate-random-allfit, include=FALSE}
 # fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
 # fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
 #             control = lmerControl(optimizer = "nlminbwrap"))
@@ -614,7 +634,7 @@ IgG4_A2G has only the convergence problem.
 ```
 
 
-###### Plate_NO as fixed effect, because max 2 levels within FID?
+##### V2: plate as fixed effect
 
 See section "Should I treat factor xxx as fixed or random?" in https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
 
@@ -622,49 +642,22 @@ See section "Should I treat factor xxx as fixed or random?" in https://bbolker.g
 
 ENI1H5N4F0S1 has only the singularity problem
 
-```{r, include=FALSE}
+```{r glycan-lmer-plate-fixed, include=FALSE}
 fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw)  #ok
 
-# adjust all glycans
-glycans_fam_adj_l <- list()
-fits <- warns <- msgs <- list()
-for (i in 6:ncol(glycans_raw)){
-  
-  # debug
-  # i <- 7
-  
-  igx <- names(glycans_raw)[i]
-  model_data <- cbind(glycans_raw[,1:5],
-                      structure(glycans_raw[, ..i], names="glycan"))
-  tmp <- tryCatch.W.E(
-    lmer(glycan ~ (1|FID) + Plate_NO + Sex*Age, model_data)
-    )
-  fits[[igx]] <- tmp$value
-  warns[[igx]] <- tmp$warning
-  msgs[[igx]] <- tmp$message
-  
-  glycans_fam_adj_l[[igx]] <- residuals(fits[[igx]])
-}
+glycans_fam_adj <- readd(glycans_fam_adj)
 ```
 
 Completely solves the singularity problem + reduces number of non-convergence warnings to 1 (LAGY_A2B). This is further resolved by using a different optimizer.
 
-```{r, include=FALSE}
+```{r glycan-lmer-plate-fixed-testcase, include=FALSE}
 fit <- lmer(LAGY_A2B ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw, 
             control = lmerControl(optimizer = "nlminbwrap"))
 ```
 
-
-##### V2: plate as fixed effect
-
-```{r}
-glycans_fam_adj <- readd(glycans_fam_adj)
-
-```
-
 ##### compare new to old residuals
 
-```{r, include=FALSE}
+```{r glycan-lmer-plate-fixedVSrandom, include=FALSE}
 
 res_comp <- dplyr::bind_cols(
   tidyr::gather(glycans_fam_adj, glycan, new_res),
@@ -686,10 +679,14 @@ boxplot(res_comp$new_res)
 
 ```
 
+
 #### Immunophenotypes
+
+
 
 ### Cross-Modality
 
+#### Glycans
 
 ```{r glycans}
 
@@ -698,6 +695,8 @@ boxplot(res_comp$new_res)
 
 
 ```
+
+#### Immunophenotypes
 
 ```{r ips}
 
@@ -713,24 +712,6 @@ boxplot(res_comp$new_res)
 
 # WGCNA
 
-## Glycans
-
-### Including derived traits
-
-```{r scale-free-softpower}
-glycans_scale_free <- readd(glycans_scale_free)
-# View(glycans_scale_free$sft_df)
-png(glue("{figdir}/WGCNA_pars/glycans_rsq.png"))
-glycans_scale_free$p_rsq
-dev.off()
-
-glycans_scale_free$p_rsq
-glycans_scale_free$p_k
-
-#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
-```
-
-
 Objective of WGCNA is not necessarily globally optimal partitioning, but rather detection of meaningful modules. Grey module is allowed to be very heterogeneous. How to deal with "grey" module?
 
 - treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?  <- current approach
@@ -739,25 +720,30 @@ Objective of WGCNA is not necessarily globally optimal partitioning, but rather 
 
 Modularity based on similarity, adjacency or TOM? Different choice depending on whether modules defined based on adj or TOM?
 
-```{r parameter-exploration}
-glycan_cross_iter_pars <- list(data=glycans_fam_adj, data_name="glycans", figdir = glue("{figdir}/WGCNA_pars"))
 
-glycan_network_pars <- read_tsv(glue("{cluster_pars_dir}/glycan_pars.tsv")) %>%
-  dplyr::select(-aim)
-glycan_cut_pars <- expand.grid(deep =c(4, 1),
-                               minModuleSize=c(3,5,10,20))
-glycan_modality <- ifelse(str_detect(names(glycans_fam_adj), pattern = "IgG"),"IgG","IgA")
+## Glycans
 
-# debug(wgcna_parameter_search)
-glycan_module_stats <- wgcna_parameter_search(glycan_network_pars, 
-                                              glycan_cut_pars,
-                                              glycan_cross_iter_pars, 
-                                              create_plot = TRUE,
-                                              feat_modality=glycan_modality)
+### Including derived traits
+
+```{r glycans-scale-free-softpower}
+glycans_scale_free <- readd(glycans_scale_free)
+# View(glycans_scale_free$sft_df)
+glycans_scale_free$p_rsq
+glycans_scale_free$p_k
+
+#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```
+
+
+
+
+```{r glycans-parameter-exploration}
+
+glycan_module_stats <- readd(glycan_module_stats)
 
 # object.size(glycan_module_stats) %>% format(units="MB")
-saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
-glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
+# saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
+# glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
 # View(glycan_module_stats$color_overview)
 
 #scale module-wise modularities?
@@ -768,40 +754,10 @@ glycan_module_stats$mod_modularities
 # calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
 # remark: sometimes adj-based module definition might be better 
 #TODO: retrieve ref for remark
-modularity_overview <- map(glycan_module_stats$mod_modularities, 
-    ~map(.x, ~rownames_to_column(.x) %>%
-          dplyr::filter(rowname != "grey") %>%
-          dplyr::select(-rowname) %>%
-          dplyr::summarise_all(sum)) %>%
-     dplyr::bind_rows(.id="cut_iter")) %>%
-  dplyr::bind_rows(.id="network_iter") %>%
-  dplyr::mutate(cut_iter = str_match(cut_iter, pattern = "cut_iter_([:digit:]+)")[,2]) %>%
-  dplyr::arrange(desc(adj_mod_modularities)) %>%
-  dplyr::left_join(rownames_to_column(glycan_network_pars), by=c("network_iter" = "rowname")) %>% 
-  dplyr::left_join(rownames_to_column(glycan_cut_pars), by=c("cut_iter" = "rowname"))
-# View(modularity_overview)
-write_csv(modularity_overview, path = glue("{resultdir}/modularity_overview.csv"))
 
 
-#generate plots
-pdf(file= glue("{figdir}/WGCNA_pars/overview.pdf"),
-    pointsize = 2,
-    width = 10,
-    height=10)
 for (i in seq_along(glycan_module_stats$plots)){
   draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
-}
-dev.off()
-  
-for (i in seq_along(glycan_module_stats$plots)){
-  
-  png(filename = glue("{figdir}/WGCNA_pars/network_{i}.png"),
-      width = 10,
-      height=10,
-      units="in",
-      res=600)
-  draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
-  dev.off()
 }
 
 
@@ -827,12 +783,87 @@ In IgG:
 ### Excluding derived traits
 
 
+```{r glycans-scale-free-softpower-noderiv}
+glycans_scale_free_noderiv <- readd(glycans_scale_free_noderiv)
+# View(glycans_scale_free$sft_df)
+
+glycans_scale_free_noderiv$p_rsq
+glycans_scale_free_noderiv$p_k
+
+#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```
+
+
+```{r glycans-parameter-exploration-noderiv}
+
+glycan_module_stats_noderiv <- readd(glycan_module_stats_noderiv)
+
+#scale module-wise modularities?
+glycan_module_stats$plots[[6]]
+glycan_module_stats$merge_pars_used
+glycan_module_stats$mod_modularities
+
+# calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
+# remark: sometimes adj-based module definition might be better 
+#TODO: retrieve ref for remark
+
+
+#generate plots
+
+  
+for (i in seq_along(glycan_module_stats$plots)){
+  draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
+}
+
+
+```
+
+Compared to WGCNA including derivered traits:
+
+Optimal set parameter set is the same (network 2, iteration 3), with slightly higher maximal modularity in the network excluding derived traits.
+
+In IgA:
+
+- In HYT (IgA - Ser89-126): *recovered* three blocks with strong positive intra-block and negative inter-block correlations:
+
+    - H>3, high S
+    - H>3, low S
+    - H < 5
+
+- cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those sites: *not retrieved*
+
+In IgG:
+
+- IgGI low fucose, low SA cluster *is recovered*
+
+### General remarks
+
+Negative correlations can carry important information, especially when the glycans are separated by addition/removal of a single sugar moiety.
+
+To assure this
+
+  1) Structure of the glycan would need to be known
+  2) Biological evidence of the reaction, e.g. compiled in database such as KEGG?
+  
+  But: sialic acid typically terminal -> excellent candidate
+
+Examples: 
+ENI1H5N4F0S1 and ENI1H5N4F0S2 are strongly negatively correlated.
+LAGY1H5N4F0S2 and LAGY1H5N4F0S1 are strongly positively correlated.
+
+Could relate to:
+- regulation of reaction: constitutive versus induced?
+- opposite associations with IPs?
+
+Some derived traits might be driven primarily by a single glycan. Example: ENI_A2S and ENI1H5N4F0S2
+
+-> Possible to assess 'relevance' of derived traits by variance decomposition?
 
 
 
 ## immunophenotypes
 
-```{r memory-calc}
+```{r wgcna-ip-memory-calc}
 # https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
 
 mem_needed <- function(n_feat){
@@ -857,22 +888,9 @@ max_block_size(64)
 ```
 
 
-### LMM assumptions
 
-From [@harrisonBriefIntroductionMixed2018]:
-
-- additivity of linear predictors
-- residuals:
-
-    - homoscedastic
-    - normal
-    - independent
     
-```{r}
 
-
-```
-    
     
 
 

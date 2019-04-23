@@ -16,5 +16,5 @@ vis_drake_graph(config)
 # make(plan)
 make(plan,  
      parallelism = "clustermq", 
-     jobs =2,
+     jobs =4,
      cache_log_file = TRUE)

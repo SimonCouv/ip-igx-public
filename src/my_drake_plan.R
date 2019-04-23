@@ -68,10 +68,12 @@ plan = drake_plan(
   # Correlation structures  -------------------------------------------
   
   glycans_fam_adj = glycans_lmer_adjust(glycans_raw),
-  glycan_residuals_pdf = make_marginal_plots(glycans, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),              # important as input to a.o. association scatters
+  glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
   
   
   # WGCNA  -------------------------------------------
+  
+  # 1. scale-free topology: power parameter
   
   scale_free_powers = c(c(1:10), seq(from = 12, to=20, by=2)),
   scale_free_common_pars = list(verbose= 0,  moreNetworkConcepts = TRUE, powerVector = scale_free_powers),
@@ -82,6 +84,46 @@ plan = drake_plan(
   
   glycans_scale_free = optimize_network_pars(data=glycans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
   glycans_scale_free_noderiv = optimize_network_pars(data=glycans_fam_adj[, -derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  
+  # 2. parameter search ~ modularity
+  
+  glycan_cross_iter_pars = list(figdir = here(figdir, "WGCNA_pars/glycans/")),
+  
+  glycan_network_pars = read_tsv(here(cluster_pars_dir,"glycan_pars.tsv")) %>%
+    dplyr::select(-aim),
+  glycan_cut_pars = expand.grid(deep =c(4, 1),
+                                 minModuleSize=c(3,5,10,20)),
+  glycan_modality = ifelse(str_detect(names(glycans_fam_adj), pattern = "IgG"),"IgG","IgA"),
+  
+  glycan_module_stats = wgcna_parameter_search(data=glycans_fam_adj,
+                                               glycan_network_pars, 
+                                               glycan_cut_pars,
+                                               glycan_cross_iter_pars, 
+                                               create_plot = TRUE,
+                                               feat_modality=glycan_modality),
+  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_fam_adj[,-derived_glycan_pos],
+                                                       glycan_network_pars, 
+                                                       glycan_cut_pars,
+                                                       glycan_cross_iter_pars, 
+                                                       create_plot = TRUE,
+                                                       feat_modality=glycan_modality[-derived_glycan_pos]),
+  
+  network_module_heatmaps = make_module_heatmap_pdf(plots = glycan_module_stats$plots,
+                                                    file_path = file_out(here(figdir, "WGCNA_pars/glycans/overview.pdf")),
+                                                    pointsize = 2,
+                                                    width = 10,
+                                                    height=10,
+                                                    network_pars = glycan_network_pars),
+  
+  network_module_heatmaps_noderiv = make_module_heatmap_pdf(plots = glycan_module_stats_noderiv$plots,
+                                                    file_path = file_out(here(figdir, "WGCNA_pars/glycans/overview_noderiv.pdf")),
+                                                    pointsize = 2,
+                                                    width = 10,
+                                                    height=10,
+                                                    network_pars = glycan_network_pars),
+  
+  modularity_overview = write_csv(glycan_module_stats$modularity_overview, path = file_out(here(resultdir, "modularity_overview.csv"))),
+  modularity_overview_noderiv = write_csv(glycan_module_stats_noderiv$modularity_overview, path = file_out(here(resultdir, "modularity_overview_noderiv.csv"))),
   
   # generate report -------------------------------------------
   
