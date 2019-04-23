@@ -78,12 +78,14 @@ plan = drake_plan(
   scale_free_iter_pars = expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
                                       corFnc = c('cor', 'bicor'),
                                       stringsAsFactors = FALSE),
-  derived_glycans = names(glycans_fam_adj[108:151]),
+  derived_glycan_pos = 108:151,
   
-  glycans_scale_free = optimize_network_pars(data=glycans_fam_adj, scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
-  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_fam_adj[, -derived_glycans], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free = optimize_network_pars(data=glycans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_fam_adj[, -derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
   
   # generate report -------------------------------------------
+  
+  # rmd_clean_name = clean_rmd_for_render(rmd = file_in("explore_univariate_igx.Rmd"), out_name = file_out("explore_univariate_igx_clean.Rmd"), "View\\("),
   
   report = target(
     command = rmarkdown::render(

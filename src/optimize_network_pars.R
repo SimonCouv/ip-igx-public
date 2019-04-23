@@ -3,7 +3,7 @@ optimize_network_pars <- function(data, common_pars, pars, powers, hline=0.80, p
   sft_df <- data.frame()
   for (i in 1:nrow(pars)){
     print(i)
-    iter_pars <- c(common_pars, list(corFnc = pars$corFnc[i], networkType= pars$networktype[i]))
+    iter_pars <- c(list(data=data), common_pars, list(corFnc = pars$corFnc[i], networkType= pars$networktype[i]))
     sft <- do.call(pickSoftThreshold, iter_pars)
     # browser()
     sft_df <- sft$fitIndices %>%

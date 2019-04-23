@@ -2,25 +2,8 @@
 title: "explore_univariate_igx"
 author: 
   - name: "Simon Couvreur"
-    email: alice@example.com
-    affiliation: Some Institute of Technology
-    corresponding: alice@example.com
-  - name: Bob Security
-    email: bob@example.com
-    affiliation: Another University
-address:
-  - code: Some Institute of Technology
-    address: Department, Street, City, State, Zip
-  - code: Another University
-    address: Department, Street, City, State, Zip
-abstract: |
-  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eget porta erat. Morbi consectetur est vel gravida pretium. Suspendisse ut dui eu ante cursus gravida non sed sem. Nullam sapien tellus, commodo id velit id, eleifend volutpat quam. Phasellus mauris velit, dapibus finibus elementum vel, pulvinar non tellus. Nunc pellentesque pretium diam, quis maximus dolor faucibus id. Nunc convallis sodales ante, ut ullamcorper est egestas vitae. Nam sit amet enim ultrices, ultrices elit pulvinar, volutpat risus.
   
-author_summary: |
-  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eget porta erat. Morbi consectetur est vel gravida pretium. Suspendisse ut dui eu ante cursus gravida non sed sem. Nullam sapien tellus, commodo id velit id, eleifend volutpat quam. Phasellus mauris velit, dapibus finibus elementum vel, pulvinar non tellus. Nunc pellentesque pretium diam, quis maximus dolor faucibus id. Nunc convallis sodales ante, ut ullamcorper est egestas vitae. Nam sit amet enim ultrices, ultrices elit pulvinar, volutpat risus.
-  
-output: rticles::plos_article
-csl: plos.csl
+output: html_document
 editor_options: 
   chunk_output_type: console
 ---
@@ -255,8 +238,8 @@ gg_miss_var(ip_anno, show_pct = TRUE)
 
 ```{r}
 count(ip_anno, composite_lin_source) %>% 
-  arrange(desc(n)) %>%
-  View()
+  arrange(desc(n))
+  # View()
   
 ```
 
@@ -331,8 +314,8 @@ arrange(ip_igx_univar_good_anno, pvalue) %>% dplyr::select(response, IgX, predic
 ip_igx_univar_good_anno %>%
   head(10000) %>% 
   count(IgX, composite_lin_source)%>%
-  arrange(IgX, desc(n)) %>% 
-  View()
+  arrange(IgX, desc(n)) 
+  # View()
 
 
 ```
@@ -600,7 +583,7 @@ plate_var_overview <- tibble(glycan=names(plate_var),
        plate_var=plate_var,
        msg = (glycan %in% names(msgs)),
        warn = (glycan %in% names(warns)))
-View(plate_var_overview)
+# View(plate_var_overview)
 # for isSingular message, there is a clear trend with plate_var
 # for non-convergence warning, there does not seem to be such trend
 plate_var_overview %>%
@@ -736,7 +719,7 @@ boxplot(res_comp$new_res)
 
 ```{r scale-free-softpower}
 glycans_scale_free <- readd(glycans_scale_free)
-View(glycans_scale_free$sft_df)
+# View(glycans_scale_free$sft_df)
 png(glue("{figdir}/WGCNA_pars/glycans_rsq.png"))
 glycans_scale_free$p_rsq
 dev.off()
@@ -775,7 +758,7 @@ glycan_module_stats <- wgcna_parameter_search(glycan_network_pars,
 # object.size(glycan_module_stats) %>% format(units="MB")
 saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
 glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
-View(glycan_module_stats$color_overview)
+# View(glycan_module_stats$color_overview)
 
 #scale module-wise modularities?
 glycan_module_stats$plots[[6]]
@@ -796,7 +779,7 @@ modularity_overview <- map(glycan_module_stats$mod_modularities,
   dplyr::arrange(desc(adj_mod_modularities)) %>%
   dplyr::left_join(rownames_to_column(glycan_network_pars), by=c("network_iter" = "rowname")) %>% 
   dplyr::left_join(rownames_to_column(glycan_cut_pars), by=c("cut_iter" = "rowname"))
-View(modularity_overview)
+# View(modularity_overview)
 write_csv(modularity_overview, path = glue("{resultdir}/modularity_overview.csv"))
 
 
