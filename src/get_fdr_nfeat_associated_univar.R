@@ -15,10 +15,10 @@ get_fdr_nfeat_associated_univar <- function(fdr_thresholds, ip_igx_univar_good){
                 n_IgA = n_IgX - n_IgG)
   }
   n_associated %>% 
-    bind_rows(n_associated, .id = "fdr_threshold")%>%
-    gather(key, n, -fdr_threshold) %>%
-    separate(key, into = c("type", "omic")) %>%
-    group_by(omic) %>%
-    mutate(prop=n/max(n),
+    dplyr::bind_rows(n_associated, .id = "fdr_threshold")%>%
+    tidyr::gather(key, n, -fdr_threshold) %>%
+    tidyr::separate(key, into = c("type", "omic")) %>%
+    dplyr::group_by(omic) %>%
+    dplyr::mutate(prop=n/max(n),
            fdr_threshold = as.numeric(fdr_threshold))
 }

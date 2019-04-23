@@ -1,7 +1,7 @@
 make_univar_qq <- function(v_pval, fig_path){
-  png(output_file, res=600,
+  png(fig_path, res=600,
       width = 6, height = 6, units = "in")
-  qqman::qq(fig_filepath)
+  qqman::qq(v_pval)
   dev.off()
   
 }
