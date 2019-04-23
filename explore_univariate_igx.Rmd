@@ -1,15 +1,14 @@
 ---
 title: "explore_univariate_igx"
-author: "Simon Couvreur"
-date: "11/04/2019"
+author: 
+  - name: "Simon Couvreur"
+  
 output: html_document
 editor_options: 
   chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
-
 library(tidyverse)
 library(data.table)
 library(lattice)
@@ -26,81 +25,30 @@ library(igraph)
 library(citr)
 library(GGally)
 library(sjPlot)
+library(here)
+library(knitr)
 
 figdir <- here("results/figures")
 resultdir <- here("results")
 cluster_pars_dir <- here("WGCNA_parameters")
 datadir <- here("data")
 
+knitr::opts_chunk$set(echo = FALSE,
+                      dev=c("png", "pdf"),
+                      fig.path = here("results/figures/report/"))
+
 
 ```
 
 ```{r functions-source}
-source("wgcna_parameter_search.R")
-source("build_TOM.R")
-source("create_dendro_color_png.R")
-source("define_modules.R")
-source("optimize_network_pars.R")
-source("define_colors.R")
-source("get_mod_modularities.R")
-source("calc_modularity.R")
-source("ggplot_qual_colors.R")
-
+# see make.R
+# otherwise: self-invalidation, see ?make
 ```
 
 
-
 ```{r functions-local}
-scatter_smooth <- function(data, mapping,size=4, corfnc = "spearman"){
-  x_name <- quo_text(mapping$x)
-  y_name <- quo_text(mapping$y)
-  x_pos = 0.5*(max(data[,x_name], na.rm = TRUE)-min(data[,x_name], na.rm = TRUE))
-  y_pos =  0.9*(max(data[,y_name], na.rm = TRUE)-min(data[,y_name], na.rm = TRUE))
-  sp_cor = round(cor(data[,x_name], data[,y_name], 
-               method = corfnc, 
-               use = "pairwise.complete.obs"),
-               digits=3
-  )
-  cor_prefix <- substr(corfnc,1,2)
-  
-  n <- nrow(data %>% dplyr::select(c(x_name, y_name)) %>% drop_na())
-  ggplot(data=data,mapping=mapping)+
-    geom_point(size=0.5, alpha=0.3)+
-    geom_smooth(alpha=0.3, color="black", size=0.5)+
-    # geom_smooth(alpha=0.3, color="black", size=0.5, method = "gam", formula = y ~ s(x, bs = "cs"))+
-    annotate("text", Inf, Inf, label=sprintf("n=%s\n%s cor=%s",n, cor_prefix,sp_cor),vjust = "inward", hjust = "inward",
-             size=size)
-    # stat_n_text(aes(x=10,y=10, group="combo"))
-}
-histogram_n <- function(data, mapping,anno_size=4){
-  x_name <- quo_text(mapping$x)
-  n <- nrow(data %>% dplyr::select(c(x_name)) %>% drop_na())
-  ggplot(data=data,mapping=mapping)+
-    geom_histogram(bins = floor(n/25))+
-    annotate("text", Inf, Inf, label=sprintf("n=%s",n),
-             vjust = "inward", hjust = "inward", size = anno_size)
-}
 
 
-# see demo(error.catching) http://r.789695.n4.nabble.com/capturing-warnings-within-loops-so-I-know-the-iterations-where-warnings-occurred-td4676786.html
-tryCatch.W.E <- function(expr)
-{
-  W <- NULL
-  w.handler <- function(w){ # warning handler
-    W <<- w
-    invokeRestart("muffleWarning")
-  }
-  M <- NULL
-  m.handler <- function(m){ # warning handler
-    M <<- m
-    # invokeRestart("muffleWarning")
-  }
-  list(value = withCallingHandlers(tryCatch(expr, error = function(e) e),
-                                   warning = w.handler,
-                                   message = m.handler),
-       warning = W,
-       message = M)
-}
 # 
 # tryCatch.W.E_original <- function(expr)
 # {
@@ -152,76 +100,54 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 ```{r read-data}
 
 # glycans
-glycans <- fread(here("input_data/glycans_corrected_20190409.csv"))
-
-glycans_raw <- fread(here("input_data/glycans_raw.csv"))
+glycans <- readd(glycans)
+glycans_raw <- readd(glycans_raw)
 
 # IPs
-ips <- fread(here("input_data/immunopheno.corrected.csv"))
+ips <- readd(ips)
 
 #Popante output
-ip_igx_univar <- fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
-  set_names(names(.) %>% tolower(.) %>% str_replace_all(., c("\\^"="", "[\\.]+"="_")))
+ip_igx_univar <- readd(ip_igx_univar)
 
 
 # annotations
-ip_anno <- fread(here("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
-  set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
-  mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage))
-IgA_anno_names_raw <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names")
-IgA_anno_names_derived <- readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names")
-twin_fam <- fread(here("input_data/data_annotations/TwinDetails_110119.csv"))
+ip_anno <- readd(ip_anno)
+IgA_anno_names_raw <- readd(IgA_anno_names_raw)
+IgA_anno_names_derived <- readd(IgA_anno_names_derived)
+twin_fam <-readd(twin_fam)
 
-
-
-# head(ip_igx_univar)
 ```
 
 ## data preprocessing
 
 ```{r QC-filter}
-ip_igx_univar <- ip_igx_univar %>%
-  # dplyr::select(predictor) %>% 
-  left_join(dplyr::select(ip_anno, set_name, robust_mario_qc), by=c("predictor"="set_name")) %>%
-  dplyr::filter(robust_mario_qc == "Good") %>%
-  dplyr::select(-robust_mario_qc)
+
+ip_igx_univar_good <- readd(ip_igx_univar_good)
 
 good_ips <- ip_anno$set_name[ip_anno$robust_mario_qc == "Good"] %>% na.omit()
 ips_qc <- ips %>%
   dplyr::select(!!good_ips)
-```
 
-
-
-```{r fdr}
-ip_igx_univar <- ip_igx_univar %>%
-  mutate(pv_adj_global = p.adjust(pvalue, method = "BH")) %>%
-  arrange(pvalue)
-
-
-  
 ```
 
 
 # Quality control
 
-```{r qqplot}
-# qq <- qqmath(x = ip_igx_univar$pvalue,
-#        distribution = qunif)
-# 
-# qqcar <- car::qqPlot(x = ip_igx_univar$pvalue,
-#                      distribution = "unif")
+drake issue: including images can be problematic. Since they are not located in the code chunks/inline code, there is no dependency being generated?
 
-png(glue("{figdir}/univar_qqplot.png"), res=600,
-    width = 6, height = 6, units = "in")
-qqman::qq(ip_igx_univar$pvalue)
-dev.off()
-# ip_igx_univar$pvalue
-```
+p-value QQ-plot:
+
+
+
+
 
 
 ```{r missing-data}
-vis_miss(glycans_raw)
+
+# `r sprintf("![](%s)", glue("{figdir}/univar_qqplot.png")`
+
+naniar::vis_miss(glycans_raw)
+
 ```
 
 
@@ -259,7 +185,7 @@ When examining set diffs (see sheet 'overview'):
 ```{r IgA-glycan-features-anno}
 
 # in univariate results
-IgA_names_univar <- unique(ip_igx_univar$response) %>% .[!str_detect(., pattern = "IgG")]
+IgA_names_univar <- unique(ip_igx_univar_good$response) %>% .[!str_detect(., pattern = "IgG")]
 
 # in corrected glycan data
 IgA_names_input <- names(glycans)[-(1:5)]  %>% .[!str_detect(., pattern = "IgG")]
@@ -283,8 +209,8 @@ setdiff(IgA_names_univar_raw, IgA_anno_names_raw$feature %>% str_replace("_","1"
 
 #derived
 # note: derived names have same coding in all sets
-setdiff(IgA_anno_names_derived$feature, IgA_names_univar_derived) %>% 
-setdiff(IgA_names_univar_derived, IgA_anno_names_derived$feature) %>% 
+setdiff(IgA_anno_names_derived$feature, IgA_names_univar_derived)
+setdiff(IgA_names_univar_derived, IgA_anno_names_derived$feature)
 intersect(IgA_names_univar_derived, IgA_anno_names_derived$feature)
 length(union(IgA_names_univar_derived, IgA_anno_names_derived$feature))
 
@@ -292,34 +218,12 @@ length(union(IgA_names_univar_derived, IgA_anno_names_derived$feature))
 
 ### Marginal distributions
 
-```{r igx-marginal-distributions}
-names(glycans_raw)
-
-glycan_dist <- list()
-for (i in 6:ncol(glycans_raw)){
-  glycan <- names(glycans)[i]
-  print(glycan)
-  glycan_dist[[glycan]] <- histogram_n(glycans_raw, aes(x=!!ensym(glycan)))
-}
-
-
-# cowplot::plot_grid(plotlist=top_plots, ncol=min(floor(sqrt(ntop)),8))
-
-# pagination: ggforce / gridExtra
-# combine independent plots: cowplot / gridExtra
-# => paginate independent plots: gridExta
-
-# https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html#multiple-pages-output
-# https://stackoverflow.com/questions/39736655/ggplot2-plots-over-multiple-pages/51772409#51772409
-glycan_marginal_plots <- marrangeGrob(glycan_dist, ncol=4, nrow=7)
-ggplot2::ggsave(glycan_marginal_plots, filename = glue("{figdir}/glycan_marginal_plots.pdf"), width = 10, height = 16)
-
-```
+see PDF
 
 
 ## IP features
 
-### Missingness of annotation fiels
+### Missingness of annotation fields
 
 ```{r}
 gg_miss_var(ip_anno, show_pct = TRUE)
@@ -334,20 +238,22 @@ gg_miss_var(ip_anno, show_pct = TRUE)
 
 ```{r}
 count(ip_anno, composite_lin_source) %>% 
-  arrange(desc(n)) %>%
-  View()
+  arrange(desc(n))
+  # View()
   
 ```
 
 
+# Analysis of univariate results
+
 ## Number of significant associations ~ FDR threshold
 
 ```{r n-sign-ass-FDR}
-plot(ecdf(ip_igx_univar$pv_adj_global),
+plot(ecdf(ip_igx_univar_good$pv_adj_global),
      xlab = "FDR",
      ylab = "prop associations < FDR")
 
-ip_igx_univar %>%
+ip_igx_univar_good %>%
   summarise(n_FDR20 = sum(pv_adj_global <0.2),
             n_FDR10 = sum(pv_adj_global <0.1),
             n_FDR5 = sum(pv_adj_global <0.05),
@@ -362,17 +268,17 @@ ecdf_logabs <- function(x){
   function(t){log10(e(t)*length(x))}
 }
 
-fdr20_ecdf <- ecdf_abs(ip_igx_univar$pv_adj_global %>% .[. < 0.2])
+fdr20_ecdf <- ecdf_abs(ip_igx_univar_good$pv_adj_global %>% .[. < 0.2])
 plot(fdr20_ecdf, xlim = c(0,0.2),
      xlab = "FDR",
      ylab = "n associations < FDR")
 
-fdr_ecdf <- ecdf_abs(ip_igx_univar$pv_adj_global)
+fdr_ecdf <- ecdf_abs(ip_igx_univar_good$pv_adj_global)
 plot(fdr_ecdf,
      xlab = "FDR",
      ylab = "n associations < FDR")
 
-fdr_log_ecdf <- ecdf_logabs(ip_igx_univar$pv_adj_global)
+fdr_log_ecdf <- ecdf_logabs(ip_igx_univar_good$pv_adj_global)
 plot(fdr_log_ecdf,
      xlab = "FDR",
      ylab = "log10(n associations < FDR)")
@@ -383,31 +289,8 @@ plot(fdr_log_ecdf,
 
 
 ```{r n-sign-ass-features-FDR}
-fdr_thresholds <- seq(0,1,0.01)
 
-n_associated <- list()
-for (fdr_threshold in fdr_thresholds){
-    n_associated[[as.character(fdr_threshold)]] <- ip_igx_univar %>%
-    # mutate(total_IgX = n_distinct(response),
-    #        total_IgG = unique(response) %>% str_detect(., "IgG") %>% sum(.),
-    #        total_IgA = total_IgX - total_IgG,
-    #        total_IP = n_distinct(predictor)) %>%
-    dplyr::filter(pv_adj_global < fdr_threshold) %>%
-    summarise(n_IgX = n_distinct(response),
-              n_IP = n_distinct(predictor),
-              # prop_igx = n_igx/unique(total_igx),
-              # prop_ip = n_ip/unique(total_ip),
-              n_IgG = unique(response) %>% str_detect(., "IgG") %>% sum(.),
-              n_IgA = n_IgX - n_IgG)
-}
-
-n_associated_m <- n_associated %>% 
-  bind_rows(n_associated, .id = "fdr_threshold")%>%
-  gather(key, n, -fdr_threshold) %>%
-  separate(key, into = c("type", "omic")) %>%
-  group_by(omic) %>%
-  mutate(prop=n/max(n),
-         fdr_threshold = as.numeric(fdr_threshold))
+n_associated_m <- readd(n_associated_m)
 
 ggplot(ungroup(n_associated_m), aes(x=fdr_threshold, y=prop, colour=omic))+
   geom_line()+
@@ -417,94 +300,39 @@ ggplot(ungroup(n_associated_m), aes(x=fdr_threshold, y=prop, colour=omic))+
   xlab("FDR threshold")+
   ylab("proportion of features with association < FDR")
 
-# debug: facet_zoom works on iris
-# ggplot(iris, aes(Petal.Length, Petal.Width, colour = Species)) +
-#   geom_point()+
-#   # scale_y_continuous(limits = c(0,2)) +
-#   facet_zoom(ylim = c(0,1))
-# 
-
 ```
-
-```{r}
-library(ggplot2)
-library(ggforce)
-ggplot(iris, aes(Petal.Length, Petal.Width, colour = Species)) +
-  geom_point()+
-  # scale_y_continuous(limits = c(0,2)) +
-  facet_zoom(ylim = c(0,1))
-```
-
 
 
 ## Explore top associations
 
 ```{r top-associations}
-ip_igx_univar_anno <- ip_igx_univar %>%
-  left_join(ip_anno %>% 
-              dplyr::select(set_name, subset_name, composite_lin_source), 
-            by=c("predictor"="set_name")) %>% 
-  mutate(IgX = ifelse(str_detect(response, pattern = "IgG"), "IgG", "IgA")) %>% 
-  dplyr::select(response, IgX, subset_name, composite_lin_source, everything())
+ip_igx_univar_good_anno <- readd(ip_igx_univar_good_anno)
 
-ip_igx_univar_anno %>%
+
+arrange(ip_igx_univar_good_anno, pvalue) %>% dplyr::select(response, IgX, predictor, composite_lin_source, pvalue) %>% head(100)
+
+ip_igx_univar_good_anno %>%
   head(10000) %>% 
   count(IgX, composite_lin_source)%>%
-  arrange(IgX, desc(n)) %>% 
-  View()
+  arrange(IgX, desc(n)) 
+  # View()
 
 
 ```
 
 
-```{r top-association-scatters}
-top_plots_list <- list()
-ntop <- 100
-
-ip_igx_univar <- arrange(ip_igx_univar, pvalue)  #repeat for safety
-
-for (i in 1:ntop){
-  igx <- ip_igx_univar$response[i]
-  ip <- ip_igx_univar$predictor[i]
-  igx_cols <- c("IID",igx)
-  ip_cols <- c("IID",ip)
-  igx_data <- glycans[, ..igx_cols]
-  ip_data <- ips[, ..ip_cols]
-  data <- full_join(igx_data, ip_data, by="IID") %>% dplyr::select(-IID)
-  # top_plots[[i]] <- ggplot(data, aes(x=!!ensym(ip), y=!!ensym(igx)))+
-  #   geom_point()
-  top_plots_list[[i]] <- scatter_smooth(data, aes(x=!!ensym(ip), y=!!ensym(igx)))
-}
-
-
-# cowplot::plot_grid(plotlist=top_plots, ncol=min(floor(sqrt(ntop)),8))
-
-# pagination: ggforce / gridExtra
-# combine independent plots: cowplot / gridExtra
-# => paginate independent plots: gridExta
-
-# https://cran.r-project.org/web/packages/gridExtra/vignettes/arrangeGrob.html#multiple-pages-output
-# https://stackoverflow.com/questions/39736655/ggplot2-plots-over-multiple-pages/51772409#51772409
-top_plots <- marrangeGrob(top_plots_list, ncol=4, nrow=7)
-ggplot2::ggsave(top_plots, filename = "top_plots.pdf", width = 10, height = 16)
-
-
-
-
-arrange(ip_igx_univar, pvalue) %>% dplyr::select(response, predictor, pvalue) %>% head(100)
-# arrange(ip_igx_univar, pv_adj_global) %>% dplyr::select(response, predictor, pv_adj_global) %>% head(100)
-  
-```
+### Top asssociations scatter
+see PDF
 
 ### Enrichment of subgroups
 
-#### At FDR levels
+#### At 5% FDR level
 
-##### Overall
+##### IP subgroup enrichment - overall
 
 ```{r}
 
-ip_lin_source_enrich_overall <- ip_igx_univar_anno %>%
+ip_lin_source_enrich_overall <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
   count(composite_lin_source) %>%
   left_join(count(ip_anno, composite_lin_source),
@@ -520,10 +348,10 @@ write_csv(ip_lin_source_enrich_overall, path = glue("{resultdir}/ip_lin_source_e
 
 ```
 
-##### By IgX
+##### IP subgroup enrichment - by IgX
 
 ```{r}
-ip_lin_source_enrich_byIgX <- ip_igx_univar_anno %>%
+ip_lin_source_enrich_byIgX <- ip_igx_univar_good_anno %>%
   dplyr::filter(pv_adj_global < 0.05) %>%
   count(composite_lin_source, IgX) %>%
   left_join(count(ip_anno, composite_lin_source),
@@ -543,190 +371,127 @@ write_csv(ip_lin_source_enrich_byIgX, path = glue("{resultdir}/ip_lin_source_enr
 
 
 
-#### continuous
+#### continuous ~ FDR
+
+##### IgX subgroup enrichment
 
 ```{r glycan-IgG-enrich}
 
-running_IgG_perc <- c()
-for (i in 1:nrow(ip_igx_univar)){
-  running_IgG_perc <- head(ip_igx_univar$response, i) %>% str_detect(., pattern = "IgG") %>% mean(.)
-}
+# running_IgG_perc <- c()
+# for (i in 1:nrow(ip_igx_univar_good)){
+#   running_IgG_perc <- head(ip_igx_univar_good$response, i) %>% str_detect(., pattern = "IgG") %>% mean(.)
+# }
 
-running_IgG_perc <-  cummean(str_detect(ip_igx_univar$response, pattern = "IgG"))
+running_IgG_perc <-  readd(running_IgG_perc)
 
 p_IgG_enrich <- tibble(cum_IgG_perc = running_IgG_perc,
-       index = 1:length(running_IgG_perc)) %>% 
+                       index = 1:length(running_IgG_perc)) %>% 
   .[c(1:10000,seq(10000,length(running_IgG_perc), 100)),] %>%
   ggplot(aes(x=index,y=cum_IgG_perc))+
   geom_line()+
   scale_x_log10()
-ggsave(p_IgG_enrich, filename = glue("{figdir}/p_IgG_enrich.png"),
-       width = 6, height = 6, dpi = 600)
+
+## gssave not require once Rmd becomes easily renderable
+# ggsave(p_IgG_enrich, filename = glue("{figdir}/p_IgG_enrich.png"),
+#        width = 6, height = 6, dpi = 600)
 
 ```
 
+##### Lin-source enrichment
+
+Overall:
+
 ```{r ip-lin_source-enrich}
 
-### overall
-
-
-
-### by index 
-
-target_indices <- c(1:10000,
-                    seq(1e4+1,1e5,100),
-                    seq(1e5+1,1, 1000),
-                    seq(10))
-
-target_indices <- unique(floor(10^seq(0,log10(nrow(ip_igx_univar)), length.out = 1e4)))
-
-
-univar_top_ip_class <- ip_igx_univar %>%
-  dplyr::select(predictor) %>%
-  left_join(dplyr::select(ip_anno, set_name, composite_lin_source), by=c("predictor"="set_name"))
-
-# proportions for each target_index
-running_lin_source_prop <- list()
-cnt <- 0
-for (i in target_indices){
-  if (cnt %% 100 == 0) print(glue("iter {cnt} - index {i}"))
-  running_lin_source_prop[[as.character(i)]] <-univar_top_ip_class %>% 
-    head(i) %>% 
-    count(composite_lin_source) %>%
-    left_join(count(ip_anno, composite_lin_source),
-              by = "composite_lin_source", 
-              suffix = c("_assoc", "_feat")) %>% 
-    mutate(n_weighted = n_assoc/n_feat,
-           prop_weighted = n_weighted/sum(n_weighted),
-           prop = n_assoc/sum(n_assoc))
-  cnt <- cnt+1
-}
-
-# reduce(left_join) is too slow
-# which(map_lgl(running_lin_source_prop, ~is.null(.x)))
-# running_lin_source_prop_df <- reduce(map(running_lin_source_prop, ~dplyr::select(.x,composite_lin_source, prop)),
-#                function(x,y,...){
-#                  full_join(x,y,by="composite_lin_source") %>%
-#                    set_names(c("composite_lin_source", names(running_lin_source_prop)[1:(ncol(.)-1)]))
-#                  }
-#                )
-
-lin_sources <- running_lin_source_prop[[length(running_lin_source_prop)]] %>%
-  dplyr::select(composite_lin_source) %>% 
-  unlist(.)
-
-lin_source_props <- list()
-for (lin_source in lin_sources){
-  print(lin_source)
-  lin_source_props[[lin_source]] <- list(
-    "unweighted" = map(running_lin_source_prop,
-      ~.x$prop[.x$composite_lin_source==lin_source]),
-    "weighted" = map(running_lin_source_prop,
-      ~.x$prop_weighted[.x$composite_lin_source==lin_source])
-    )
-}
-lin_source_props_df <- lin_source_props %>% 
-  purrr::transpose() %>% 
-  map(~map(.x, ~as.numeric(.x)) %>%
-        bind_cols() %>%
-        mutate(top = target_indices)) %>%
-  bind_rows(.id="weighting")
-
-saveRDS(lin_source_props_df, file = glue("{datadir}/lin_source_props_df.RDS"))
+lin_source_props_df <- readd(lin_source_props_df)
 
 p_lin_source_enrich <- lin_source_props_df %>%
-  gather(lin_source, prop, -one_of("top","weighting")) %>%
+  tidyr::gather(lin_source, prop, -one_of("top","weighting")) %>%
   ggplot(aes(x=top, y=prop, color=lin_source, group=lin_source))+
   geom_line()+
   scale_x_log10()+
   facet_wrap(weighting~.)
-ggsave(p_lin_source_enrich, filename = glue("{figdir}/p_lin_source_enrich.png"),
-       width = 6, height = 6, dpi = 600)
+# ggsave(p_lin_source_enrich, filename = glue("{figdir}/p_lin_source_enrich.png"),
+#        width = 6, height = 6, dpi = 600)
 
 
 ```
 
+By IgX:
+
 ```{r lin_source-enrich-by-IgX}
 
-# proportions for each target_index
-running_lin_source_IgX_prop <- list()
-cnt <- 0
-for (i in target_indices){
-  if (cnt %% 100 == 0) print(glue("iter {cnt} - index {i}"))
-  running_lin_source_IgX_prop[[as.character(i)]] <-ip_igx_univar_anno %>%
-    head(i) %>% 
-    count(IgX, composite_lin_source) %>%
-    group_by(IgX) %>% 
-    mutate(prop = n/sum(n))
-  cnt <- cnt+1
-}
-
-# collect proportions for each lin_source and IgX combination in the data
-lin_source_IgX_props <- list()
-for (lin_source in lin_sources){
-  print(lin_source)
-  
-  for (IgX in c("IgG", "IgA")){
-  lin_source_IgX_props[[lin_source]][[IgX]] <- map(running_lin_source_IgX_prop,
-      ~.x$prop[.x$composite_lin_source==lin_source & .x$IgX == IgX])
-  }
-}
-lin_source_IgX_props_df <- map(lin_source_IgX_props, 
-                               ~map(.x, ~as.numeric(.x))) %>%
-  purrr::transpose() %>%
-  map(~bind_cols(.x) %>%
-        mutate(top = as.numeric(names(lin_source_props[[1]])))
-      ) %>%
-  bind_rows(.id="IgX")
-
-# save
-saveRDS(lin_source_IgX_props_df, file = glue("{datadir}/lin_source_IgX_props_df.RDS"))
+lin_source_IgX_props_df <- readd(lin_source_IgX_props_df)
 
 # plot
 p_lin_source_IgX_enrich <- lin_source_IgX_props_df %>%
-  gather(lin_source, prop, -one_of(c("top", "IgX"))) %>%
+  tidyr::gather(lin_source, prop, -one_of(c("top", "IgX"))) %>%
   ggplot(aes(x=top, y=prop, color=lin_source, group=lin_source))+
   geom_line()+
   scale_x_log10()+
   facet_grid(IgX~.)
-ggsave(p_lin_source_IgX_enrich, filename = glue("{figdir}/p_lin_source_IgX_enrich.png"),
-       width = 6, height = 6, dpi = 600)
+# ggsave(p_lin_source_IgX_enrich, filename = glue("{figdir}/p_lin_source_IgX_enrich.png"),
+#        width = 6, height = 6, dpi = 600)
 
 
 ```
 
 
 
-## Correlation structures
+# Correlation structures
 
-```{r glycans}
+Non-trivial due to family clustering, either:
 
-# glycans
-glycan_cor <- cor(x=glycans[,-(1:5)], use = "pairwise.complete.obs", method = "pea,rson")
-hist(glycan_cor[upper.tri(glycan_cor, diag = TRUE)])
-
-ComplexHeatmap::Heatmap(glycan_cor)
-
-
-```
-
-```{r ips}
-
-# validate bigcor function on glycans
-testbigcor <- bigcor(x=as.data.frame(glycans[,-(1:6)]), nblocks = 10, use = "pairwise.complete.obs", method = "pearson")
-dim.ff(testbigcor) <- c(150*150,1)
-ffbase::hist.ff(testbigcor, breaks = 50)
-
-# now apply to ips
-ips[,-(1:2)]
-```
-
-
-# WGCNA glycans
+    - work with residuals of linear mixed effect model
+    - explicitly model family structure to calculate correlations
+    - use PopPAnTe?
 
 ## family-adjusted correlations
 
-### V1: plate as mixed effect
+### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
+
+Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
+
+unanswered SO on same subject: https://stats.stackexchange.com/questions/81220/multivariate-mixed-model-in-nlme
+
+Extra catch: would need to re-implement first phases of WGCNA, because these only take raw data, not pre-computed correlations
+
+
+*Excellent ref:*
+
+Luo, J., D’Angelo, G., Gao, F., Ding, J., Xiong, C., 2015. Bivariate correlation coefficients in family-type clustered studies. Biometrical Journal 57, 1084–1109. https://doi.org/10.1002/bimj.201400131
+
+- three type of correlations, "unconditional marginal bivariate correlation coefficient" is what is needed.
+
+*But how to implement?*
+
+
+From following refs it seems that only within-cluster BCC is estimable with lme4.
+
+However, the models of Luo2015 is also implemented on melted data! (see their appendix)
+
+method via melting the data (multivariate -> repeated measures) in lme4
+https://mac-theobio.github.io/QMEE/MultivariateMixed.html#a-trick-to-do-multivariate-mixed-models-using-lme4
+http://rpubs.com/bbolker/3336
+https://stackoverflow.com/questions/7831243/multivariate-linear-mixed-model-in-lme4
+
+
+
+Other refs:
+Lorenz, D.J., Datta, S., Harkema, S.J., 2011. Marginal association measures for clustered data. Stat Med 30, 3181–3191. https://doi.org/10.1002/sim.4368
+Bland, J.M., Altman, D.G., 1995a. Statistics notes: Calculating correlation coefficients with repeated observations: Part 1—correlation within subjects. BMJ 310, 446. https://doi.org/10.1136/bmj.310.6977.446
+Bland, J.M., Altman, D.G., 1995b. Calculating correlation coefficients with repeated observations: Part 2—correlation between subjects. BMJ 310, 633. https://doi.org/10.1136/bmj.310.6980.633
+Meinck, S., Rodriguez, M.C., 2013. Considerations for correlation analysis using clustered data: working with the teacher education and development study in mathematics (TEDS-M) and other international studies. Large-scale Assessments in Education 1, 7. https://doi.org/10.1186/2196-0739-1-7
+Rosner, B., Glynn, R.J., 2017. Estimation of rank correlation for clustered data. Statistics in Medicine 36, 2163–2186. https://doi.org/10.1002/sim.7257
+Rosner, R., 2016. Marginal Association Measures for Clustered Data.
+
+## LME-residual approach
+
+### Within-modality
+
+#### Glycans
+
+##### V1: plate as mixed effect
 
 ```{r}
 
@@ -745,7 +510,7 @@ for (i in 6:ncol(glycans_raw)){
   igx <- names(glycans_raw)[i]
   model_data <- cbind(glycans_raw[,1:5],
                       structure(glycans_raw[, ..i], names="glycan")) %>%
-    mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
+    dplyr::mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
   tmp <- tryCatch.W.E(
     lmer(glycan ~ (1|FID) + (1|Plate_NO) + Sex*Age, model_data)
     )
@@ -758,20 +523,20 @@ for (i in 6:ncol(glycans_raw)){
 
 
 glycans_fam_adj_old <-glycans_fam_adj_l %>%
-  map(~tibble(res=.x, index=names(.x)) %>%
-        right_join(tibble(index=as.character(1:nrow(glycans_raw)))) %>%
+  purrr::map(~tibble(res=.x, index=names(.x)) %>%
+        dplyr::right_join(tibble(index=as.character(1:nrow(glycans_raw)))) %>%
         dplyr::select(res)) %>%
-  bind_cols() %>%
-  set_names(names(glycans_fam_adj_l))
+  dplyr::bind_cols() %>%
+  rlang::set_names(names(glycans_fam_adj_l))
 
 
 
 ```
 
 
-### Troubleshoot
+##### Troubleshoot
 
-#### Problem outline
+###### Problem outline
 
 Problems:
 
@@ -791,13 +556,13 @@ Convergence resources:
  - https://stats.stackexchange.com/questions/378939/dealing-with-singular-fit-in-mixed-models
 
 
-```{r}
+```{r, include=FALSE}
 # reason for boundary fit: not that FID and plate are strictly aliased
-summarise_all(glycans[,1:4],n_distinct)
+dplyr::summarise_all(glycans_raw[,1:4],n_distinct)
 glycans_raw %>%
-  group_by(FID) %>%
-  summarise(n_plates = n_distinct(Plate_NO)) %>%
-  count(n_plates)
+  dplyr::group_by(FID) %>%
+  dplyr::summarise(n_plates = n_distinct(Plate_NO)) %>%
+  dplyr::count(n_plates)
 # rather it seems that plate_NO is generating the warnings
 glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|Plate_NO), glycans_raw)  # not ok
 summary(glycans_fit)   # var(plate_NO)=0
@@ -808,9 +573,9 @@ glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age, glycans_raw)  # ok
 
 # var(plate_no) is non-zero for 63% of glycans
 plate_var <- fits %>%
-  map(~tidy(.x)) %>%
-  map(~dplyr::filter(.x, term=="sd_(Intercept).Plate_NO")) %>%
-  map_dbl("estimate")
+  purrr::map(~broom::tidy(.x)) %>%
+  purrr::map(~dplyr::filter(.x, term=="sd_(Intercept).Plate_NO")) %>%
+  purrr::map_dbl("estimate")
 
 boxplot(plate_var)
 mean(plate_var==0)
@@ -818,11 +583,11 @@ plate_var_overview <- tibble(glycan=names(plate_var),
        plate_var=plate_var,
        msg = (glycan %in% names(msgs)),
        warn = (glycan %in% names(warns)))
-View(plate_var_overview)
+# View(plate_var_overview)
 # for isSingular message, there is a clear trend with plate_var
 # for non-convergence warning, there does not seem to be such trend
 plate_var_overview %>%
-  gather(output_type, value, -one_of("glycan", "plate_var")) %>%
+  tidyr::gather(output_type, value, -one_of("glycan", "plate_var")) %>%
   ggplot(aes(x=value, y=plate_var))+
   geom_boxplot()+
   theme_bw()+
@@ -833,24 +598,23 @@ plate_var_overview %>%
 ```
 
 
-#### Try different optimizers (allFit), following ?convergence
+###### Try different optimizers (allFit), following ?convergence
 
 IgG4_A2G has only the convergence problem.
 
 
-
-```{r}
-fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
-fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
-            control = lmerControl(optimizer = "nlminbwrap"))
-allfits <- allFit(fit)
-isOK <- sapply(allfits,is,"merMod")
-lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
+```{r, include=FALSE}
+# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
+# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
+#             control = lmerControl(optimizer = "nlminbwrap"))
+# allfits <- allFit(fit)
+# isOK <- sapply(allfits,is,"merMod")
+# lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
 
 ```
 
 
-#### Plate_NO as fixed effect, because max 2 levels within FID?
+###### Plate_NO as fixed effect, because max 2 levels within FID?
 
 See section "Should I treat factor xxx as fixed or random?" in https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
 
@@ -858,7 +622,7 @@ See section "Should I treat factor xxx as fixed or random?" in https://bbolker.g
 
 ENI1H5N4F0S1 has only the singularity problem
 
-```{r}
+```{r, include=FALSE}
 fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw)  #ok
 
 # adjust all glycans
@@ -885,61 +649,26 @@ for (i in 6:ncol(glycans_raw)){
 
 Completely solves the singularity problem + reduces number of non-convergence warnings to 1 (LAGY_A2B). This is further resolved by using a different optimizer.
 
-```{r}
+```{r, include=FALSE}
 fit <- lmer(LAGY_A2B ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw, 
             control = lmerControl(optimizer = "nlminbwrap"))
 ```
 
 
-### V2: plate as fixed effect
+##### V2: plate as fixed effect
 
 ```{r}
-# adjust all glycans
-glycans_fam_adj_l <- list()
-fits <- warns <- msgs <- list()
-for (i in 6:ncol(glycans_raw)){
-  
-  # debug
-  # i <- 7
-  
-  igx <- names(glycans_raw)[i]
-  model_data <- cbind(glycans_raw[,1:5],
-                      structure(glycans_raw[, ..i], names="glycan"))%>%
-    mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
-  tmp <- tryCatch.W.E(
-    lmer(glycan ~ (1|FID) + Plate_NO + Sex*Age, model_data, 
-            control = lmerControl(optimizer = "nlminbwrap"))
-    )
-  fits[[igx]] <- tmp$value
-  warns[[igx]] <- tmp$warning
-  msgs[[igx]] <- tmp$message
-  
-  glycans_fam_adj_l[[igx]] <- residuals(fits[[igx]])
-}
-
-
-# names of residuals correspond to row index of glycans_raw (those which are not NA)
-head(which(!is.na(glycans_raw$ENI1H5N4F0S1)))
-all.equal(as.character(which(!is.na(glycans_raw$ENI1H5N4F0S1))),
-          names(glycans_fam_adj_l$ENI1H5N4F0S1))
-
-glycans_fam_adj <-glycans_fam_adj_l %>%
-  map(~tibble(res=.x, index=names(.x)) %>%
-        right_join(tibble(index=as.character(1:nrow(glycans_raw))),by="index") %>%
-        dplyr::select(res)) %>%
-  bind_cols() %>%
-  set_names(names(glycans_fam_adj_l))
-
+glycans_fam_adj <- readd(glycans_fam_adj)
 
 ```
 
-### compare new to old residuals
+##### compare new to old residuals
 
-```{r}
+```{r, include=FALSE}
 
-res_comp <- bind_cols(
-  gather(glycans_fam_adj, glycan, new_res),
-  gather(glycans_fam_adj_old, glycan, old_res)
+res_comp <- dplyr::bind_cols(
+  tidyr::gather(glycans_fam_adj, glycan, new_res),
+  tidyr::gather(glycans_fam_adj_old, glycan, old_res)
 )
 
 p_res <- ggplot(res_comp, aes(x=old_res, y=new_res))+
@@ -957,20 +686,40 @@ boxplot(res_comp$new_res)
 
 ```
 
+#### Immunophenotypes
+
+### Cross-Modality
 
 
+```{r glycans}
 
-## WGCNA procedure
+# hist(glycan_cor[upper.tri(glycan_cor, diag = TRUE)])
+# ComplexHeatmap::Heatmap(glycan_cor)
+
+
+```
+
+```{r ips}
+
+# # validate bigcor function on glycans
+# testbigcor <- bigcor(x=as.data.frame(glycans[,-(1:6)]), nblocks = 10, use = "pairwise.complete.obs", method = "pearson")
+# dim.ff(testbigcor) <- c(150*150,1)
+# ffbase::hist.ff(testbigcor, breaks = 50)
+# 
+# # now apply to ips
+# ips[,-(1:2)]
+```
+
+
+# WGCNA
+
+## Glycans
+
+### Including derived traits
 
 ```{r scale-free-softpower}
-powers = c(c(1:10), seq(from = 12, to=20, by=2))
-common_pars <- list(data=glycans_fam_adj, verbose= 0,  moreNetworkConcepts = TRUE, powerVector = powers)
-pars <- expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
-            corFnc = c('cor', 'bicor'),
-            stringsAsFactors = FALSE)
-
-glycans_scale_free <- optimize_network_pars(common_pars, pars, powers, plt_title = "glycans")
-View(glycans_scale_free$sft_df)
+glycans_scale_free <- readd(glycans_scale_free)
+# View(glycans_scale_free$sft_df)
 png(glue("{figdir}/WGCNA_pars/glycans_rsq.png"))
 glycans_scale_free$p_rsq
 dev.off()
@@ -1009,7 +758,7 @@ glycan_module_stats <- wgcna_parameter_search(glycan_network_pars,
 # object.size(glycan_module_stats) %>% format(units="MB")
 saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
 glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
-View(glycan_module_stats$color_overview)
+# View(glycan_module_stats$color_overview)
 
 #scale module-wise modularities?
 glycan_module_stats$plots[[6]]
@@ -1023,14 +772,14 @@ modularity_overview <- map(glycan_module_stats$mod_modularities,
     ~map(.x, ~rownames_to_column(.x) %>%
           dplyr::filter(rowname != "grey") %>%
           dplyr::select(-rowname) %>%
-          summarise_all(sum)) %>%
-     bind_rows(.id="cut_iter")) %>%
-  bind_rows(.id="network_iter") %>%
-  mutate(cut_iter = str_match(cut_iter, pattern = "cut_iter_([:digit:]+)")[,2]) %>%
-  arrange(desc(adj_mod_modularities)) %>%
-  left_join(rownames_to_column(glycan_network_pars), by=c("network_iter" = "rowname")) %>% 
-  left_join(rownames_to_column(glycan_cut_pars), by=c("cut_iter" = "rowname"))
-View(modularity_overview)
+          dplyr::summarise_all(sum)) %>%
+     dplyr::bind_rows(.id="cut_iter")) %>%
+  dplyr::bind_rows(.id="network_iter") %>%
+  dplyr::mutate(cut_iter = str_match(cut_iter, pattern = "cut_iter_([:digit:]+)")[,2]) %>%
+  dplyr::arrange(desc(adj_mod_modularities)) %>%
+  dplyr::left_join(rownames_to_column(glycan_network_pars), by=c("network_iter" = "rowname")) %>% 
+  dplyr::left_join(rownames_to_column(glycan_cut_pars), by=c("cut_iter" = "rowname"))
+# View(modularity_overview)
 write_csv(modularity_overview, path = glue("{resultdir}/modularity_overview.csv"))
 
 
@@ -1074,7 +823,14 @@ In IgG:
 
 - IgGI low fucose, low SA cluster
 
-# WGCNA immunophenotypes
+
+### Excluding derived traits
+
+
+
+
+
+## immunophenotypes
 
 ```{r memory-calc}
 # https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
@@ -1101,12 +857,6 @@ max_block_size(64)
 ```
 
 
-## family-adjusted correlations
-
-### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
-
-Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
-
 ### LMM assumptions
 
 From [@harrisonBriefIntroductionMixed2018]:
@@ -1121,15 +871,13 @@ From [@harrisonBriefIntroductionMixed2018]:
 ```{r}
 
 
-ggpair
-
 ```
     
     
 
 
 
-# References
+# References {#references .unnumbered}
 
 
 
