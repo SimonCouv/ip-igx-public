@@ -43,6 +43,7 @@ plan = drake_plan(
   # glycan marginal distributions pdf
   raw_glycan_marginal_pdf = make_marginal_plots(glycans_raw[,-(1:5)], fig_path = file_out("results/figures/raw_glycan_marginal_plots.pdf")),  # important as input to lmer models
   glycan_marginal_pdf = make_marginal_plots(glycans[,-(1:5)], fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),              # important as input to a.o. association scatters
+  ip_marginal_pdf = make_marginal_plots(ips[,3:100], fig_path = file_out("results/figures/ips_marginal_plots.pdf")),              # important as input to a.o. association scatters
   
   # top association scatter plots pdf
   top_assoc_scatter_pdf = make_top_assoc_scatters(ntop = 100, ip_igx_univar_good, glycans, ips, file_path = file_out("results/figures/top_assoc_scatters.pdf")),

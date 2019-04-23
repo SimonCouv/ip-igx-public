@@ -4,6 +4,7 @@ packrat/
 *.zip
 .Rhistory
 *.csv
+!drake_cache.csv
 *.tsv
 packrat/lib*/
 *.RDS

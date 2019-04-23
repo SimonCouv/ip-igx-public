@@ -1,0 +1,115 @@
+hash,type,name
+c8b8bc05a5ddd949,import,calc_modularity
+5d3d9259f7d950dc,import,clean_rmd_for_render
+b53f44193e16a0fe,import,cluster_pars_dir
+bf7b1eeee38914d0,import,define_colors
+944761892358e3b5,import,define_modules
+63503c5e36ec8023,target,derived_glycan_pos
+623cfea5b5846c62,target,derived_glycans
+7261752cbc3e21a2,import,figdir
+e146a538b281ba42,import,get_fdr_nfeat_associated_univar
+9abca51b221ee646,import,get_lin_source_props
+b3c9b71b06e2fa4f,import,get_lin_source_props_byIgX
+d6814ec0a532c2a6,import,get_mod_modularities
+6f7cb5edc72cfaa7,import,ggplot_qual_colors
+cd2906fa558e8ea4,target,glycan_cor
+f5131714677c8897,target,glycan_cross_iter_pars
+3c9679aa4227519c,target,glycan_cut_pars
+c85d88fc56f4e042,target,glycan_marginal_pdf
+4b07a368f2506fda,target,glycan_modality
+4908f80b84bac198,target,glycan_module_stats
+45e8eaa4c93909f3,target,glycan_module_stats_noderiv
+eb3c4be0b150942f,target,glycan_network_pars
+c85d88fc56f4e042,target,glycan_residuals_pdf
+46215f1e3dec1732,target,glycans
+cd82ddd0372ac4d2,target,glycans_fam_adj
+d0d6cd90d2f5bf24,import,glycans_lmer_adjust
+7146707f91dbebd7,target,glycans_raw
+9e0d5ac11717e928,target,glycans_scale_free
+de0e7ee2f7240aea,target,glycans_scale_free_noderiv
+1fc3751d94c08117,import,histogram_n
+90c62598b51a7eb6,target,IgA_anno_names_derived
+da098a56c43ce351,target,IgA_anno_names_raw
+91e388505eb2568c,target,ip_anno
+373bf43432939e72,target,ip_igx_univar
+b2f19a57db542b12,target,ip_igx_univar_good
+761bc3da080296d5,target,ip_igx_univar_good_anno
+c85d88fc56f4e042,target,ip_marginal_pdf
+21ff23f46f96cae0,target,ips
+057e82ded7a3006b,target,lin_source_IgX_props_df
+3a720afd4278fee5,import,lin_source_props
+bbaf655a3e528c71,target,lin_source_props_df
+9e9fa9923857306e,import,make_glycan_marginal_plots
+d32129c41a2a9252,import,make_marginal_plots
+0167a6157f6f391e,import,make_module_heatmap_pdf
+9e5949fb95a730b3,import,make_qq
+8bd9ea93c40c7f71,import,make_top_assoc_scatters
+9e5949fb95a730b3,import,make_univar_qq
+b2f23cb1ab7447e8,target,modularity_overview
+538c2138cf4db170,target,modularity_overview_noderiv
+ad4710f140bb2f28,target,n_associated_m
+0cffd506ddf5372e,import,ComplexHeatmap::Heatmap
+42bcd7336d10def9,import,ggplot2::ggsave
+6b565102cd698077,import,circlize::colorRamp2
+cf99599e32d2ef78,import,dynamicTreeCut::cutreeHybrid
+65fd467dabcf0969,import,dplyr::mutate
+7e9435a9a48561bb,import,dplyr::arrange
+2f8b5d3cd722f853,import,dplyr::bind_cols
+b105e8acc8917d80,import,dplyr::bind_rows
+a64e8d3863a8aab3,import,dplyr::distinct
+45bb99dd7c555194,import,dplyr::filter
+7eb6146f6a3bdf86,import,dplyr::group_by
+3ca11e3c1e0f9604,import,dplyr::left_join
+efb8f9a49b3682a3,import,dplyr::right_join
+4a050d9b616a34b5,import,dplyr::summarise_all
+36f9439f5abf9401,import,dplyr::select
+228d59069eeaafde,import,dplyr::ungroup
+bec9a72d94a5212c,import,purrr::map
+bbade528d74d3e8d,import,purrr::transpose
+3031a3340d4d43a5,import,qqman::qq
+3acdd7b2c6c8deb5,import,readxl::read_xlsx
+d5b757c52d0db6f9,import,rlang::set_names
+778e7710442aae8c,import,rmarkdown::render
+a6366398dfd8fefb,import,tidyr::gather
+60ac5f243f874624,import,tidyr::separate
+b212b59951fe696a,target,network_module_heatmaps
+b212b59951fe696a,target,network_module_heatmaps_noderiv
+c6ecc79f0d07d619,import,optimize_network_pars
+9da1ad5015449fa7,import,file EDA.Rmd
+cba55526d90f7924,target,file EDA_report.html
+3ea8d2dc9b9879ac,target,file WGCNA_pars/glycans/overview.pdf
+3ea8d2dc9b9879ac,target,file WGCNA_pars/glycans/overview_noderiv.pdf
+d45bef9d6a21db17,import,file explore_univariate_igx.Rmd
+32e74bbc1733e8d6,target,file explore_univariate_igx_clean.Rmd
+3ea8d2dc9b9879ac,target,file modularity_overview_noderiv.csv
+3ea8d2dc9b9879ac,target,file modularity_overview.csv
+97f45ca9fc7bfdfa,target,file qq.png
+ce33b242e1feb5e4,target,file results/qq.png
+6d70ba7ed76cca5c,target,file results/report.html
+cb14b7a4a80ce4a0,target,file results/EDA_report.html
+fcfe6e5ecb4f8da1,target,file results/figures/top_assoc_scatters.pdf
+38c968727e66f30a,target,file results/figures/univar_qqplot.png
+0bedd91dc85b5966,target,file results/figures/glycan_marginal_plots.pdf
+15cd8b352e850745,target,file results/figures/glycan_res_marginal_plots.pdf
+28224b37cfd980c1,target,file results/figures/ips_marginal_plots.pdf
+bb1059f99351a5bf,target,file results/figures/raw_glycan_marginal_plots.pdf
+3ea8d2dc9b9879ac,target,file {figdir}/glycan_marginal_plots.pdf
+3ea8d2dc9b9879ac,target,file {figdir}/top_assoc_scatters.pdf
+3ea8d2dc9b9879ac,import,file {figdir}/univar_qqplot.png
+973127639b6c1a3c,target,pval_data
+0132f86f62add78f,target,qq
+c85d88fc56f4e042,target,raw_glycan_marginal_pdf
+604b58a395507b5c,target,report
+df10f7d64241f6ab,target,rmd_clean
+f2ba81cde5283bb5,target,rmd_clean_name
+a755fb6599ea75e4,target,running_IgG_perc
+12cc342bde28b8a4,target,scale_free_common_pars
+12814af993c9e376,target,scale_free_iter_pars
+af3bec8e1c981a66,target,scale_free_powers
+5d03fc541a520643,import,scatter_smooth
+51103b0c69a75fea,target,somedata
+c7c18939e523d777,target,target_indices
+c85d88fc56f4e042,target,top_assoc_scatter_pdf
+5985ebc3fae4efca,import,tryCatch.W.E
+274cabea31952097,target,twin_fam
+e55991f2813adf61,import,wgcna_parameter_search

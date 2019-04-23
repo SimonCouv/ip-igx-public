@@ -250,6 +250,9 @@ count(ip_anno, composite_lin_source) %>%
   
 ```
 
+### Marginal distributions
+
+see PDF for subset of IPs
 
 # Analysis of univariate results
 
@@ -452,7 +455,8 @@ Non-trivial due to family clustering, either:
 
     - work with residuals of linear mixed effect model
     - explicitly model family structure to calculate correlations
-    - use PopPAnTe?
+    - use PopPAnTe? IF variables in regression are on same scale, correlation coefficient = regression coefficient (https://en.wikipedia.org/wiki/Simple_linear_regression#Fitting_the_regression_line)
+        - links to question of quantile-normalisation
 
 ## family-adjusted correlations
 
@@ -681,8 +685,6 @@ boxplot(res_comp$new_res)
 
 
 #### Immunophenotypes
-
-
 
 ### Cross-Modality
 
