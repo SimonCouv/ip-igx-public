@@ -1,4 +1,4 @@
-optimize_network_pars <- function(common_pars, pars, powers, hline=0.80, plt_title){
+optimize_network_pars <- function(data, common_pars, pars, powers, hline=0.80, plt_title){
   
   sft_df <- data.frame()
   for (i in 1:nrow(pars)){

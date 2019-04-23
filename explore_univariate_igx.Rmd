@@ -64,49 +64,8 @@ knitr::opts_chunk$set(echo = FALSE,
 
 
 ```{r functions-local}
-scatter_smooth <- function(data, mapping,size=4, corfnc = "spearman"){
-  x_name <- quo_text(mapping$x)
-  y_name <- quo_text(mapping$y)
-  x_pos = 0.5*(max(data[,x_name], na.rm = TRUE)-min(data[,x_name], na.rm = TRUE))
-  y_pos =  0.9*(max(data[,y_name], na.rm = TRUE)-min(data[,y_name], na.rm = TRUE))
-  sp_cor = round(cor(data[,x_name], data[,y_name], 
-               method = corfnc, 
-               use = "pairwise.complete.obs"),
-               digits=3
-  )
-  cor_prefix <- substr(corfnc,1,2)
-  
-  n <- nrow(data %>% dplyr::select(c(x_name, y_name)) %>% drop_na())
-  ggplot(data=data,mapping=mapping)+
-    geom_point(size=0.5, alpha=0.3)+
-    geom_smooth(alpha=0.3, color="black", size=0.5)+
-    # geom_smooth(alpha=0.3, color="black", size=0.5, method = "gam", formula = y ~ s(x, bs = "cs"))+
-    annotate("text", Inf, Inf, label=sprintf("n=%s\n%s cor=%s",n, cor_prefix,sp_cor),vjust = "inward", hjust = "inward",
-             size=size)
-    # stat_n_text(aes(x=10,y=10, group="combo"))
-}
 
 
-
-# see demo(error.catching) http://r.789695.n4.nabble.com/capturing-warnings-within-loops-so-I-know-the-iterations-where-warnings-occurred-td4676786.html
-tryCatch.W.E <- function(expr)
-{
-  W <- NULL
-  w.handler <- function(w){ # warning handler
-    W <<- w
-    invokeRestart("muffleWarning")
-  }
-  M <- NULL
-  m.handler <- function(m){ # warning handler
-    M <<- m
-    # invokeRestart("muffleWarning")
-  }
-  list(value = withCallingHandlers(tryCatch(expr, error = function(e) e),
-                                   warning = w.handler,
-                                   message = m.handler),
-       warning = W,
-       message = M)
-}
 # 
 # tryCatch.W.E_original <- function(expr)
 # {
@@ -302,6 +261,8 @@ count(ip_anno, composite_lin_source) %>%
 ```
 
 
+# Analysis of univariate results
+
 ## Number of significant associations ~ FDR threshold
 
 ```{r n-sign-ass-FDR}
@@ -494,36 +455,60 @@ p_lin_source_IgX_enrich <- lin_source_IgX_props_df %>%
 
 
 
-## Correlation structures
+# Correlation structures
 
-```{r glycans}
+Non-trivial due to family clustering, either:
 
-# glycans
-glycan_cor <- readd(glycan_cor)
-hist(glycan_cor[upper.tri(glycan_cor, diag = TRUE)])
-
-ComplexHeatmap::Heatmap(glycan_cor)
-
-
-```
-
-```{r ips}
-
-# # validate bigcor function on glycans
-# testbigcor <- bigcor(x=as.data.frame(glycans[,-(1:6)]), nblocks = 10, use = "pairwise.complete.obs", method = "pearson")
-# dim.ff(testbigcor) <- c(150*150,1)
-# ffbase::hist.ff(testbigcor, breaks = 50)
-# 
-# # now apply to ips
-# ips[,-(1:2)]
-```
-
-
-# WGCNA glycans
+    - work with residuals of linear mixed effect model
+    - explicitly model family structure to calculate correlations
+    - use PopPAnTe?
 
 ## family-adjusted correlations
 
-### V1: plate as mixed effect
+### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
+
+Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
+
+unanswered SO on same subject: https://stats.stackexchange.com/questions/81220/multivariate-mixed-model-in-nlme
+
+Extra catch: would need to re-implement first phases of WGCNA, because these only take raw data, not pre-computed correlations
+
+
+*Excellent ref:*
+
+Luo, J., D’Angelo, G., Gao, F., Ding, J., Xiong, C., 2015. Bivariate correlation coefficients in family-type clustered studies. Biometrical Journal 57, 1084–1109. https://doi.org/10.1002/bimj.201400131
+
+- three type of correlations, "unconditional marginal bivariate correlation coefficient" is what is needed.
+
+*But how to implement?*
+
+
+From following refs it seems that only within-cluster BCC is estimable with lme4.
+
+However, the models of Luo2015 is also implemented on melted data! (see their appendix)
+
+method via melting the data (multivariate -> repeated measures) in lme4
+https://mac-theobio.github.io/QMEE/MultivariateMixed.html#a-trick-to-do-multivariate-mixed-models-using-lme4
+http://rpubs.com/bbolker/3336
+https://stackoverflow.com/questions/7831243/multivariate-linear-mixed-model-in-lme4
+
+
+
+Other refs:
+Lorenz, D.J., Datta, S., Harkema, S.J., 2011. Marginal association measures for clustered data. Stat Med 30, 3181–3191. https://doi.org/10.1002/sim.4368
+Bland, J.M., Altman, D.G., 1995a. Statistics notes: Calculating correlation coefficients with repeated observations: Part 1—correlation within subjects. BMJ 310, 446. https://doi.org/10.1136/bmj.310.6977.446
+Bland, J.M., Altman, D.G., 1995b. Calculating correlation coefficients with repeated observations: Part 2—correlation between subjects. BMJ 310, 633. https://doi.org/10.1136/bmj.310.6980.633
+Meinck, S., Rodriguez, M.C., 2013. Considerations for correlation analysis using clustered data: working with the teacher education and development study in mathematics (TEDS-M) and other international studies. Large-scale Assessments in Education 1, 7. https://doi.org/10.1186/2196-0739-1-7
+Rosner, B., Glynn, R.J., 2017. Estimation of rank correlation for clustered data. Statistics in Medicine 36, 2163–2186. https://doi.org/10.1002/sim.7257
+Rosner, R., 2016. Marginal Association Measures for Clustered Data.
+
+## LME-residual approach
+
+### Within-modality
+
+#### Glycans
+
+##### V1: plate as mixed effect
 
 ```{r}
 
@@ -566,9 +551,9 @@ glycans_fam_adj_old <-glycans_fam_adj_l %>%
 ```
 
 
-### Troubleshoot
+##### Troubleshoot
 
-#### Problem outline
+###### Problem outline
 
 Problems:
 
@@ -588,9 +573,9 @@ Convergence resources:
  - https://stats.stackexchange.com/questions/378939/dealing-with-singular-fit-in-mixed-models
 
 
-```{r}
+```{r, include=FALSE}
 # reason for boundary fit: not that FID and plate are strictly aliased
-dplyr::summarise_all(glycans[,1:4],n_distinct)
+dplyr::summarise_all(glycans_raw[,1:4],n_distinct)
 glycans_raw %>%
   dplyr::group_by(FID) %>%
   dplyr::summarise(n_plates = n_distinct(Plate_NO)) %>%
@@ -630,24 +615,23 @@ plate_var_overview %>%
 ```
 
 
-#### Try different optimizers (allFit), following ?convergence
+###### Try different optimizers (allFit), following ?convergence
 
 IgG4_A2G has only the convergence problem.
 
 
-
 ```{r, include=FALSE}
-fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
-fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
-            control = lmerControl(optimizer = "nlminbwrap"))
-allfits <- allFit(fit)
-isOK <- sapply(allfits,is,"merMod")
-lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
+# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
+# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
+#             control = lmerControl(optimizer = "nlminbwrap"))
+# allfits <- allFit(fit)
+# isOK <- sapply(allfits,is,"merMod")
+# lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
 
 ```
 
 
-#### Plate_NO as fixed effect, because max 2 levels within FID?
+###### Plate_NO as fixed effect, because max 2 levels within FID?
 
 See section "Should I treat factor xxx as fixed or random?" in https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
 
@@ -655,7 +639,7 @@ See section "Should I treat factor xxx as fixed or random?" in https://bbolker.g
 
 ENI1H5N4F0S1 has only the singularity problem
 
-```{r}
+```{r, include=FALSE}
 fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw)  #ok
 
 # adjust all glycans
@@ -682,57 +666,22 @@ for (i in 6:ncol(glycans_raw)){
 
 Completely solves the singularity problem + reduces number of non-convergence warnings to 1 (LAGY_A2B). This is further resolved by using a different optimizer.
 
-```{r}
+```{r, include=FALSE}
 fit <- lmer(LAGY_A2B ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw, 
             control = lmerControl(optimizer = "nlminbwrap"))
 ```
 
 
-### V2: plate as fixed effect
+##### V2: plate as fixed effect
 
 ```{r}
-# adjust all glycans
-glycans_fam_adj_l <- list()
-fits <- warns <- msgs <- list()
-for (i in 6:ncol(glycans_raw)){
-  
-  # debug
-  # i <- 7
-  
-  igx <- names(glycans_raw)[i]
-  model_data <- cbind(glycans_raw[,1:5],
-                      structure(glycans_raw[, ..i], names="glycan"))%>%
-    mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
-  tmp <- tryCatch.W.E(
-    lmer(glycan ~ (1|FID) + Plate_NO + Sex*Age, model_data, 
-            control = lmerControl(optimizer = "nlminbwrap"))
-    )
-  fits[[igx]] <- tmp$value
-  warns[[igx]] <- tmp$warning
-  msgs[[igx]] <- tmp$message
-  
-  glycans_fam_adj_l[[igx]] <- residuals(fits[[igx]])
-}
-
-
-# names of residuals correspond to row index of glycans_raw (those which are not NA)
-head(which(!is.na(glycans_raw$ENI1H5N4F0S1)))
-all.equal(as.character(which(!is.na(glycans_raw$ENI1H5N4F0S1))),
-          names(glycans_fam_adj_l$ENI1H5N4F0S1))
-
-glycans_fam_adj <-glycans_fam_adj_l %>%
-  map(~tibble(res=.x, index=names(.x)) %>%
-        dplyr::right_join(tibble(index=as.character(1:nrow(glycans_raw))),by="index") %>%
-        dplyr::select(res)) %>%
-  dplyr::bind_cols() %>%
-  rlang::set_names(names(glycans_fam_adj_l))
-
+glycans_fam_adj <- readd(glycans_fam_adj)
 
 ```
 
-### compare new to old residuals
+##### compare new to old residuals
 
-```{r}
+```{r, include=FALSE}
 
 res_comp <- dplyr::bind_cols(
   tidyr::gather(glycans_fam_adj, glycan, new_res),
@@ -754,19 +703,39 @@ boxplot(res_comp$new_res)
 
 ```
 
+#### Immunophenotypes
+
+### Cross-Modality
 
 
+```{r glycans}
 
-## WGCNA procedure
+# hist(glycan_cor[upper.tri(glycan_cor, diag = TRUE)])
+# ComplexHeatmap::Heatmap(glycan_cor)
+
+
+```
+
+```{r ips}
+
+# # validate bigcor function on glycans
+# testbigcor <- bigcor(x=as.data.frame(glycans[,-(1:6)]), nblocks = 10, use = "pairwise.complete.obs", method = "pearson")
+# dim.ff(testbigcor) <- c(150*150,1)
+# ffbase::hist.ff(testbigcor, breaks = 50)
+# 
+# # now apply to ips
+# ips[,-(1:2)]
+```
+
+
+# WGCNA
+
+## Glycans
+
+### Including derived traits
 
 ```{r scale-free-softpower}
-powers = c(c(1:10), seq(from = 12, to=20, by=2))
-common_pars <- list(data=glycans_fam_adj, verbose= 0,  moreNetworkConcepts = TRUE, powerVector = powers)
-pars <- expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
-            corFnc = c('cor', 'bicor'),
-            stringsAsFactors = FALSE)
-
-glycans_scale_free <- optimize_network_pars(common_pars, pars, powers, plt_title = "glycans")
+glycans_scale_free <- readd(glycans_scale_free)
 View(glycans_scale_free$sft_df)
 png(glue("{figdir}/WGCNA_pars/glycans_rsq.png"))
 glycans_scale_free$p_rsq
@@ -871,7 +840,14 @@ In IgG:
 
 - IgGI low fucose, low SA cluster
 
-# WGCNA immunophenotypes
+
+### Excluding derived traits
+
+
+
+
+
+## immunophenotypes
 
 ```{r memory-calc}
 # https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
@@ -896,40 +872,6 @@ mem_needed(n_ips)  #180 GB
 max_block_size(64)
 
 ```
-
-
-## family-adjusted correlations
-
-### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
-
-Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
-
-unanswered SO: https://stats.stackexchange.com/questions/81220/multivariate-mixed-model-in-nlme
-
-
-
-Luo, J., D’Angelo, G., Gao, F., Ding, J., Xiong, C., 2015. Bivariate correlation coefficients in family-type clustered studies. Biometrical Journal 57, 1084–1109. https://doi.org/10.1002/bimj.201400131
-
-*But how to implement?*
-
-From following refs it seems that only within-cluster BCC is estimable with lme4.
-
-However, the models of Luo2015 is also implemented on melted data! (see their appendix)
-
-method via melting the data (multivariate -> repeated measures) in lme4
-https://mac-theobio.github.io/QMEE/MultivariateMixed.html#a-trick-to-do-multivariate-mixed-models-using-lme4
-http://rpubs.com/bbolker/3336
-https://stackoverflow.com/questions/7831243/multivariate-linear-mixed-model-in-lme4
-
-
-
-Other refs:
-Lorenz, D.J., Datta, S., Harkema, S.J., 2011. Marginal association measures for clustered data. Stat Med 30, 3181–3191. https://doi.org/10.1002/sim.4368
-Bland, J.M., Altman, D.G., 1995a. Statistics notes: Calculating correlation coefficients with repeated observations: Part 1—correlation within subjects. BMJ 310, 446. https://doi.org/10.1136/bmj.310.6977.446
-Bland, J.M., Altman, D.G., 1995b. Calculating correlation coefficients with repeated observations: Part 2—correlation between subjects. BMJ 310, 633. https://doi.org/10.1136/bmj.310.6980.633
-Meinck, S., Rodriguez, M.C., 2013. Considerations for correlation analysis using clustered data: working with the teacher education and development study in mathematics (TEDS-M) and other international studies. Large-scale Assessments in Education 1, 7. https://doi.org/10.1186/2196-0739-1-7
-Rosner, B., Glynn, R.J., 2017. Estimation of rank correlation for clustered data. Statistics in Medicine 36, 2163–2186. https://doi.org/10.1002/sim.7257
-Rosner, R., 2016. Marginal Association Measures for Clustered Data.
 
 
 ### LMM assumptions

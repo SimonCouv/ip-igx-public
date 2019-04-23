@@ -41,7 +41,8 @@ plan = drake_plan(
   qq = make_univar_qq(v_pval = ip_igx_univar_good$pvalue, fig_path = file_out("results/figures/univar_qqplot.png")),
   
   # glycan marginal distributions pdf
-  glycan_marginal_pdf = make_glycan_marginal_plots(glycans_raw, fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),
+  raw_glycan_marginal_pdf = make_marginal_plots(glycans_raw[,-(1:5)], fig_path = file_out("results/figures/raw_glycan_marginal_plots.pdf")),  # important as input to lmer models
+  glycan_marginal_pdf = make_marginal_plots(glycans[,-(1:5)], fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),              # important as input to a.o. association scatters
   
   # top association scatter plots pdf
   top_assoc_scatter_pdf = make_top_assoc_scatters(ntop = 100, ip_igx_univar_good, glycans, ips, file_path = file_out("results/figures/top_assoc_scatters.pdf")),
@@ -64,10 +65,23 @@ plan = drake_plan(
   lin_source_IgX_props_df = get_lin_source_props_byIgX(target_indices,
                                              ip_igx_univar_good_anno),
   
+  # Correlation structures  -------------------------------------------
+  
+  glycans_fam_adj = glycans_lmer_adjust(glycans_raw),
+  glycan_residuals_pdf = make_marginal_plots(glycans, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),              # important as input to a.o. association scatters
+  
+  
   # WGCNA  -------------------------------------------
   
+  scale_free_powers = c(c(1:10), seq(from = 12, to=20, by=2)),
+  scale_free_common_pars = list(verbose= 0,  moreNetworkConcepts = TRUE, powerVector = scale_free_powers),
+  scale_free_iter_pars = expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
+                                      corFnc = c('cor', 'bicor'),
+                                      stringsAsFactors = FALSE),
+  derived_glycans = names(glycans_fam_adj[108:151]),
   
-  glycan_cor = cor(x=glycans[,-(1:5)], use = "pairwise.complete.obs", method = "pearson"),
+  glycans_scale_free = optimize_network_pars(data=glycans_fam_adj, scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_fam_adj[, -derived_glycans], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
   
   # generate report -------------------------------------------
   
