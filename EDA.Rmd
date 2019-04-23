@@ -20,3 +20,10 @@ somedata <- readd(somedata)
 mean(somedata)
 ```
 
+
+```{r iris, include = FALSE}
+# ```{r iris}
+plot(iris[,1:2])
+```
+
+

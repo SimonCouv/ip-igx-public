@@ -1,14 +1,20 @@
 # based on https://ropenscilabs.github.io/drake-manual/projects.html#safer-interactivity, 21/04/2019
 
-source(here::here("src/imports.R"))
-source(here::here("src/source_local_functions.R"))
-source(here::here("src/my_drake_plan.R"))
-source(here::here("src/dir_defs.R"))
 # source(here::here())
 
 
-# graph of workflow
-# config <- drake_config(plan) # nolint
-# vis_drake_graph(config) 
+library(qqman)
+library(drake)
+library(digest)
+
+make_qq <- function(v_pval, fig_path){
+  png(fig_path, res=600,
+      width = 6, height = 6, units = "in")
+  qqman::qq(v_pval)
+  dev.off()
+  
+}
+
+source(here::here("my_drake_plan.R"))
 
 drake_config(plan, verbose = 2)
