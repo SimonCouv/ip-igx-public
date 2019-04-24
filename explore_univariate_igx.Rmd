@@ -112,6 +112,7 @@ glycans_raw <- readd(glycans_raw)
 
 # IPs
 ips <- readd(ips)
+ips_raw <- readd(ips_raw)
 
 #Popante output
 ip_igx_univar <- readd(ip_igx_univar)
@@ -229,6 +230,20 @@ see PDF
 
 
 ## IP features
+
+### Compare raw vs corrected
+
+IIDs 99611 and 99612 (rows 225 and 226) have been dropped in the corrected IPs.
+
+```{r}
+dim(ips)
+dim(ips_raw)
+
+setdiff(ips_raw$IID, ips$IID)
+which(ips_raw$IID %in% setdiff(ips_raw$IID, ips$IID))
+
+```
+
 
 ### Missingness of annotation fields
 
@@ -501,21 +516,15 @@ Rosner, R., 2016. Marginal Association Measures for Clustered Data.
 
 ### LMM assumptions
 
-From [@harrisonBriefIntroductionMixed2018]:
 
-- additivity of linear predictors
-- residuals:
-
-    - homoscedastic
-    - normal
-    - independent
-    
 
 ### Within-modality
 
 #### Glycans
 
 ##### V1: plate as mixed effect
+
+Groups are non-nested, in the sense of Gelman2007, p244 ("overlapping categories"). This implies that HLMdiag *cannot* be used.
 
 ```{r glycan-lmer-plate-random}
 

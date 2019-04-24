@@ -5,6 +5,7 @@ plan = drake_plan(
   glycans_raw = fread(here("input_data/glycans_raw.csv")),  
   # IPs
   ips = fread(here("input_data/immunopheno.corrected.csv")),
+  ips_raw = fread(here("input_data/immunopheno.raw.csv")),
   #Popante output
   ip_igx_univar = fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
     set_names(names(.) %>% tolower(.) %>% str_replace_all(., c("\\^"="", "[\\.]+"="_"))),
