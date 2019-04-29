@@ -1,6 +1,6 @@
 make_marginal_plots <- function(data, fig_path) {
   data_dist <- list()
-  for (i in 6:ncol(data)){
+  for (i in seq_along(data)){
     var <- names(data)[i]
     print(var)
     data_dist[[var]] <- histogram_n(data, aes(x=!!ensym(var)))

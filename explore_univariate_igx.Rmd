@@ -13,36 +13,45 @@ output:
     self_contained: yes
 editor_options: 
   chunk_output_type: console
+bibliography: /home/simon/google_drive/Zotero/synced_bibtex_library.bib
+
 ---
 
 ```{r setup, include=FALSE}
-library(tidyverse)
-library(data.table)
-library(lattice)
-# library(cowplot)
-library(ggforce)
-library(gridExtra)
-library(ComplexHeatmap)
-library(WGCNA)
-library(lme4)
-library(EnvStats)
-library(naniar)
-library(glue)
-library(igraph)
-library(citr)
-library(GGally)
-library(sjPlot)
-library(here)
-library(knitr)
+
+if (interactive()){
+  library(tidyverse)
+  library(data.table)
+  library(lattice)
+  # library(cowplot)
+  library(ggforce)
+  library(gridExtra)
+  library(ComplexHeatmap)
+  library(WGCNA)
+  library(lme4)
+  library(EnvStats)
+  library(naniar)
+  library(glue)
+  library(igraph)
+  library(citr)
+  library(GGally)
+  library(sjPlot)
+  library(here)
+  library(knitr)
+  library(drake)
+}
 
 figdir <- here("results/figures")
 resultdir <- here("results")
 cluster_pars_dir <- here("WGCNA_parameters")
 datadir <- here("data")
 
-knitr::opts_chunk$set(echo = FALSE,
+knitr::opts_chunk$set(echo = TRUE,    # in combination with code_folding: hide
                       dev=c("png", "pdf"),
                       fig.path = here("results/figures/report/"))
+# automatically switch .png to .pdf in knitr::include_graphics, when rendering to PDF
+# https://bookdown.org/yihui/bookdown/figures.html
+options(knitr.graphics.auto_pdf = TRUE) 
 
 
 ```
@@ -83,6 +92,8 @@ knitr::opts_chunk$set(echo = FALSE,
 
 # Preprocessing
 
+## Load data
+
 Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 mentioned by Alessia.
 
 ```{r remove-error-lines}
@@ -110,9 +121,19 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 glycans <- readd(glycans)
 glycans_raw <- readd(glycans_raw)
 
+glycans_mf <- readd(glycans_mf)
+glycans_raw_mf <- readd(glycans_raw_mf)
+
 # IPs
 ips <- readd(ips)
 ips_raw <- readd(ips_raw)
+
+# mean abundances
+ip_raw_mean <- readd(ip_raw_mean)
+
+# IP missingness
+ip_raw_missing <- readd(ip_raw_missing)
+ip_missing <- readd(ip_missing)
 
 #Popante output
 ip_igx_univar <- readd(ip_igx_univar)
@@ -120,6 +141,7 @@ ip_igx_univar <- readd(ip_igx_univar)
 
 # annotations
 ip_anno <- readd(ip_anno)
+ip_anno_dt <- data.table(ip_anno)
 IgA_anno_names_raw <- readd(IgA_anno_names_raw)
 IgA_anno_names_derived <- readd(IgA_anno_names_derived)
 twin_fam <-readd(twin_fam)
@@ -138,32 +160,181 @@ ips_qc <- ips %>%
 
 ```
 
-
 # Quality control
-
-drake issue: including images can be problematic. Since they are not located in the code chunks/inline code, there is no dependency being generated?
 
 p-value QQ-plot:
 
+```{r univar-qq}
 
-
-
-
-
-```{r missing-data}
-
-# `r sprintf("![](%s)", glue("{figdir}/univar_qqplot.png")`
-
-naniar::vis_miss(glycans_raw)
+knitr::include_graphics(here::here("results/figures/univar_qqplot.png"))
 
 ```
 
 
+
 # Data exploration
 
-## IgX features
 
-### Annotations
+
+## Glycans
+
+Dataset dimensions (first 5 columns are ID/co-variates)
+
+```{r glycan-dims}
+dim(glycans)
+dim(glycans_raw)
+
+head(names(glycans), 10)
+```
+
+
+### IgX features
+
+#### Missingness
+
+##### Visual overview
+
+Visual overview, raw glycan data
+
+```{r glycan-raw-vis-miss}
+naniar::vis_miss(glycans_raw)
+```
+
+Visual overview, corrected glycan data
+
+```{r glycan-corr-vis-miss}
+naniar::vis_miss(glycans)
+```
+
+##### Missing features per sample
+
+Histogram of percentage missing features per sample:
+
+```{r hist-miss-feat-per-sample}
+hist(rowMeans(is.na(glycans[-(1:5)])), 25, main = "glycans - corrected")
+hist(rowMeans(is.na(glycans_raw[-(1:5)])), 25,  main = "glycans - raw")
+
+```
+
+Samples with > 60% missingness, filtered out for the rest of the analysis:
+
+```{r}
+
+glycans[,-(1:5)] %>%
+  as.matrix() %>% 
+  t() %>%
+  # structure(., colnames = as.character(glycans[,2])) %>%
+  as_tibble() %>% 
+  set_names(as.character(glycans[[2]])) %>%
+  dplyr::summarise_all(~mean(is.na(.))) %>% 
+  tidyr::gather(IID, prop_missing) %>%
+  dplyr::filter(prop_missing > 0.6) %>%
+  dplyr::arrange(desc(prop_missing))
+
+glycans_raw[,-(1:5)] %>%
+  as.matrix() %>% 
+  t() %>%
+  # structure(., colnames = as.character(glycans[,2])) %>%
+  as_tibble() %>% 
+  set_names(as.character(glycans[[2]])) %>%
+  dplyr::summarise_all(~mean(is.na(.))) %>% 
+  tidyr::gather(IID, prop_missing) %>%
+  dplyr::filter(prop_missing > 0.6) %>%
+  dplyr::arrange(desc(prop_missing))
+
+```
+
+##### Missing samples per feature
+
+Histogram of proportion missing samples per feature:
+
+```{r hist-miss-samples-per-feat}
+par(mfrow=c(1,2))
+hist(colMeans(is.na(glycans[-(1:5)])), 25, main = "glycans - corrected", xlab = "proportion missing")
+hist(colMeans(is.na(glycans_raw[-(1:5)])), 25,  main = "glycans - raw", xlab = "proportion missing")
+
+max(colMeans(is.na(glycans[-(1:5)])))
+max(colMeans(is.na(glycans_raw[-(1:5)])))
+
+```
+
+No features were filtered out, as the missingness was maximally 32%.
+
+
+##### KNN-impute
+
+mostly for PCA.
+
+parameters to tune: distance metric [@troyanskayaMissingValueEstimation2001] and k [@malinowskiClassificationPatientsTreated2015]
+
+```{r kkn-impute}
+
+mat <- as.matrix(glycans_mf[,-(1:5)])
+n_iter <- 100
+k_range <- 3:10
+rmse <- matrix(0, ncol = length(k_range), nrow = n_iter)
+complete_mask <- !is.na(mat)
+set_na_prop <- 0.1
+
+my_knn <- function(mat, dist_method = "euclidean"){
+  stopifnot(is.matrix(mat))
+  # imputes column-wise, i.e. finds nearest columns to column to be imputed
+  imp <- mat
+  incomplete_col <- which(colSums(is.na(mat)) > 0)
+  for (j in seq_along(incomplete_col)){
+    avail_rows <- which(!is.na(mat[,j]))
+    dist_m <- do.call(dist, list(x=mat, method=dist_method)) #
+  }
+}
+
+
+for (i in 1:n_iter){
+  set_NA_ind <- sample(which(complete_mask), set_na_prop*prod(dim(mat)))
+  mat_setNA <- mat
+  mat_setNA[set_NA_ind] <- NA
+  for (k in k_range){
+    cat("mataset", i, "; k = ", k)
+    imp_vim <- kNN(mat_setNA, k=k)
+    yai <- yai()
+    imp_yai <- 
+    rmse[i, k] <- sqrt(sum((imp[set_NA_ind] - mat[set_NA_ind])^2))
+  }
+}
+boxplot(rmse)
+
+m <- matrix(sample(c(TRUE, FALSE),20, replace = TRUE), ncol=2)
+m
+which(m) #column-wise
+m[which(m)] <- 5
+m
+
+m <- matrix(rep(1:3, each=3), ncol = 3)
+m <- matrix(rep(1:3, 3), ncol = 3)
+dist(m)
+```
+
+
+IgA features in (corrected) glycans and PopPAnTe output are equal sets.
+
+```{r}
+# in univariate results
+IgA_names_univar <- unique(ip_igx_univar_good$response) %>% .[!str_detect(., pattern = "IgG")]
+
+# in corrected glycan data
+IgA_names_input <- names(glycans)[-(1:5)]  %>% .[!str_detect(., pattern = "IgG")]
+
+# n_input == n_results
+setequal(IgA_names_univar, IgA_names_input)
+
+# split in raw and derived
+IgA_names_univar_raw <- IgA_names_univar[1:71]
+IgA_names_univar_derived <- IgA_names_univar[72:99]
+```
+
+
+### Feature annotations
+
+#### IgA
 
 99 IgA features (input==results)
 
@@ -185,53 +356,280 @@ When examining set diffs (see sheet 'overview'):
     - reason unclear for all
 - Out of 28 derived input/results names and 52 derived anno names, only 6 are overlapping
 
+For raw features:
 
-52 IgG features, but no annotation?
+in anno but not in univar:
 
-
-
-```{r IgA-glycan-features-anno}
-
-# in univariate results
-IgA_names_univar <- unique(ip_igx_univar_good$response) %>% .[!str_detect(., pattern = "IgG")]
-
-# in corrected glycan data
-IgA_names_input <- names(glycans)[-(1:5)]  %>% .[!str_detect(., pattern = "IgG")]
-
-# n_input == n_results
-setequal(IgA_names_univar, IgA_names_input)
-
-# split in raw and derived
-IgA_names_univar_raw <- IgA_names_univar[1:71]
-IgA_names_univar_derived <- IgA_names_univar[72:99]
-
-
+```{r}
 # annotated names not in input/results -------
 
 #raw
 # note: in input/results raw names are coded as e.g. HYT1H2N5F0S2 while in anno they are HYT_H2N5F0S2
-setdiff(IgA_anno_names_raw$feature %>% str_replace("_","1"), IgA_names_univar_raw) %>% 
+setdiff(IgA_anno_names_raw$feature %>% str_replace("_","1"), IgA_names_univar_raw) %T>% 
   writeLines(., glue("{resultdir}/anno_raw_noresult.txt"))
-setdiff(IgA_names_univar_raw, IgA_anno_names_raw$feature %>% str_replace("_","1")) %>% 
-  writeLines(.,glue("{resultdir}/result_raw_no_anno.txt"))
+```
 
+in univar but not in anno:
+
+```{r}
+setdiff(IgA_names_univar_raw, IgA_anno_names_raw$feature %>% str_replace("_","1")) %T>% 
+  writeLines(.,glue("{resultdir}/result_raw_no_anno.txt"))
+```
+
+
+For derived features:
+
+in anno but not in univar:
+
+```{r}
 #derived
 # note: derived names have same coding in all sets
 setdiff(IgA_anno_names_derived$feature, IgA_names_univar_derived)
+```
+
+in univar but not in anno:
+
+```{r}
 setdiff(IgA_names_univar_derived, IgA_anno_names_derived$feature)
+```
+
+```{r}
 intersect(IgA_names_univar_derived, IgA_anno_names_derived$feature)
 length(union(IgA_names_univar_derived, IgA_anno_names_derived$feature))
 
 ```
 
-### Marginal distributions
+
+#### IgG
+
+52 IgG features, but no annotation?
+
+### Marginal distributions (after correction for age*SEX + (1|batch))
 
 see PDF
 
 
-## IP features
+## Immunophenotypes
 
-### Compare raw vs corrected
+
+### Feature annotations
+
+#### Structure of dataset (feature hierarchy)
+
+Overview resolved issues:
+
+* 'xxx.new' in set_name column -> all have source=="P6 newB"
+
+Overview open issues:
+
+* "(Ignore)" in canonical_name_x column -> meaning?
+* lineage "04-Aug" -> meaning? + inconsistent coding in subset_name column ("4-8")
+* lower-level parent lineages -> mean_value =100% -> where as proportion of higher-level (i.e. containing) lineage?
+* duplicated subset_names?
+
+##### Parent lineage
+
+Cell counts are expressed as proportion of a "parent lineage", this is part before '/' in the subset_name column and also the value in the 'lineage' column (when source is not Lin or MFI). Exception is lineage "04-Aug", which is encoded in the subset_name column as 4-8.
+
+```{r}
+before_slash <- str_match(ip_anno$subset_name[ip_anno$source != "Lin" & ip_anno$source != "MFI"], pattern = "(.*)/[^/]+")[,2]
+not_eq <- which(before_slash != ip_anno$lineage[ip_anno$source != "Lin" & ip_anno$source != "MFI"])
+View(ip_anno[ip_anno$source != "Lin" & ip_anno$source != "MFI",] %>% .[not_eq,])
+before_slash[not_eq]
+
+```
+
+The 44 parent lineages are:
+
+```{r}
+ip_anno_dt[phenotype=="*", .(set_name, trait, source, lineage, subset_name, mean_value)][order(lineage)]
+# View("parent_lineages")
+```
+
+The parent_lineages can be (any of):
+
+* contained within a different parent_lineage: only memory vs naive in CD4 and CD8
+* expressed as % of a containing lineage in the source=="Lin" lines: e.g. parent_lineage "4-8-" in "%NKT:4-8-".
+
+
+```{r}
+ip_anno_dt[source=="Lin", .(set_name, trait, source, lineage, subset_name, mean_value)][order(subset_name)] 
+# View("source==Lin")
+
+```
+
+While parent_lineage CD4/Memory is contained within parent_lineage CD4, CD4/Memory is not explicitly listed among any of the subsets of CD4.
+
+Without clear definition of which marker values define the Memory subset of CD4, the proportion CD4:CD4/Memory cannot be obtained.
+
+More generally, if a measurement is expressed as proportion of a parent_lineage, and the parent_lineage is not a) expressed  explicitly as a fraction of its containing parent_lineage (in subset_name column), or b) listed among source==Lin lines, the proportion of the measurement relative to higher-order lineages cannot be calculated.
+
+```{r}
+ip_anno_dt[subset_name == "CD4/Memory/"]
+ip_anno_dt[subset_name == "CD4/Memory"]
+ip_anno_dt[subset_name == "CD4/"]
+ip_anno_dt[str_detect(subset_name, pattern="CD4:.*")]
+
+ip_anno_dt[str_detect(subset_name, pattern="CD4/[^/]*$") & source != "Lin" & source != "MFI"] %>% 
+  mutate(n_marker = str_count(phenotype, pattern="\\-|\\+")) %>% arrange(n_marker) %>% View()
+
+```
+
+Parent lineage "mDC/1c-/16-" can be traced as "%mDC:1c-" -> "%Lin-14-:mDC" -> "%Lin-:14-" -> "%Lin-" in the source==Lin lines, but the proportion "mDC/1c-:16-" is missing from the source==Lin lines, nor is it explicitly expressed elsewhere in the data.
+
+```{r}
+
+ip_anno_dt[str_detect(subset_name, pattern="mDC/1c-/[^/]*$") & source != "Lin" & source != "MFI"] %>% 
+  mutate(n_marker = str_count(phenotype, pattern="\\-|\\+")) %>% arrange(n_marker) %>% View()
+
+ip_anno_dt[str_detect(subset_name, pattern="mDC/1c-") & source != "Lin" & source != "MFI"] %>% 
+  mutate(n_marker = str_count(phenotype, pattern="\\-|\\+")) %>% arrange(n_marker) %>% View()
+
+```
+
+##### duplicated subset_names
+
+All correspond to subsets which are measured on multiple plates, typically at a high-level of the gating hierarchy (where the lower gates are different between plates). This occurs for CD4, CD8, DPT and DNT
+
+For CD4 & CD8: only the subsets on later plate(s) are labeled as (Ignore)
+For DPT & DNT: all subsets are labeled as (Ignore)
+
+Some of the duplicated subsets are parent lineages (where mean_value = 100%), therefore cell count is not relevant. For the others: mean values could be used instead of ignoring one?
+
+```{r}
+table(ip_anno$source)
+
+sum(duplicated(ip_anno$subset_name))
+ip_anno[which(duplicated(ip_anno$subset_name)|duplicated(ip_anno$subset_name, fromLast = TRUE)),] %>% View()
+
+```
+
+##### (Ignore) labels in canonical_name_x
+
+43,474 IPs have the (Ignore) label.
+
+```{r}
+str_match(ip_anno$canonical_name_x, pattern=".*\\(Ignore\\).*") %>% na.omit(.) %>% View()
+```
+
+
+Does not correspond clearly with the QC columns (neither Max nor Mario).
+
+```{r}
+
+table(ignore=str_detect(ip_anno$canonical_name_x, pattern=".*\\(Ignore\\).*"), 
+      max_qc=ip_anno$final_qc_max)
+table(ignore=str_detect(ip_anno$canonical_name_x, pattern=".*\\(Ignore\\).*"), 
+      mario_qc=ip_anno$robust_mario_qc)
+
+```
+
+Cannot be related to duplication, because much fewer duplicates than (Ignore) labels
+
+```{r}
+table(ignore=str_detect(ip_anno$canonical_name_x, pattern=".*\\(Ignore\\).*"),
+      duplicated=duplicated(ip_anno$subset_name)|duplicated(ip_anno$subset_name, fromLast = TRUE))
+```
+
+
+Meaning remains unclear, currently the (Ignore) label is not taken into account.
+
+#### *.new in set_name
+
+Strictly used for source=="P6 newB". 
+
+```{r}
+# str_match(ip_anno$set_name, pattern=".*new.*") %>% na.omit(.) %>% View()
+
+table(str_detect(ip_anno$set_name, pattern=".*new.*"), ip_anno$source)
+```
+
+Moreover, these subsets make up the large majority (95%) of Panel 6 (P6) subsets.
+
+```{r}
+table(ip_anno$source)
+
+mean(str_detect(ip_anno_dt[str_detect(source, pattern = "P6"), set_name], pattern=".*new.*"))
+```
+
+
+#### Missingness of annotation fields
+
+Note: empty fields in immunophenotype annotation set to NA.
+
+No annotation column has more than 20% missing data.
+
+```{r ip_anno_missingness}
+# which(is.na(ip_anno$lineage))
+stopifnot(sum(ip_anno$lineage ==""))
+
+gg_miss_var(ip_anno, show_pct = TRUE)
+
+```
+
+Moreover, the annotation columns relevant to this analysis are either free of missing data, or (for phenotype and lineage) can be complete traced down to the lines where source=="MFI" or source =="Lin".
+
+```{r}
+ip_anno_dt[, table(source, phenotype_NA = is.na(phenotype))]
+ip_anno_dt[, table(source, lineage_NA = is.na(lineage))]
+
+```
+
+The 2 QC columns do have some NAs (coded as NA in the flat file), but are not used in this analysis (yet).
+NAs occur in the same rows in both QC columns, and exclusively for "P6" and "P6 earlyB", but not for the most frequent "P6 newB".
+
+Presumably Panel 6 was rerun and no QC was performed on the first run because of some clear defect?
+
+```{r}
+all(which(is.na(ip_anno$final_qc_max))==which(is.na(ip_anno$robust_mario_qc)))
+
+ip_anno_dt[, table(source, final_QC_NA = is.na(final_qc_max))]
+
+```
+
+
+#### Define overall grouping of IPs,
+
+To accomodate lineage, MFI and other CSFs, introduce 'composite_lin_source':
+
+- for lineage/MFI features: 'Source' column (value = 'Lin' or 'MFI')
+- 'Lineage' column for all others (value=parent lineage on which the subset is calculated)
+
+```{r composite_lin_source_count}
+count(ip_anno, composite_lin_source) %>% 
+  arrange(desc(n))
+  # View()
+  
+```
+
+### Features (immunophenotypes)
+
+#### Missingness
+
+```{r}
+
+boxplot(ip_missing$missing_prop)
+boxplot(ip_raw_missing$missing_prop)
+# ggplot(ip_missing, aes(x="",y=missing_prop))+
+#   geom_boxplot()
+# plot(ecdf(ip_missing$missing_prop))
+
+```
+
+Per-feature proportion missing is maintained between the raw and corrected datasets. 
+
+```{r}
+setkey(ip_missing, set_name)
+setkey(ip_raw_missing, set_name)
+merge(ip_raw_missing, ip_missing, all=FALSE, suffixes = c("_raw", "_corrected"))[
+  , .(diff=missing_prop_raw - missing_prop_corrected)
+][order(-diff)]
+
+```
+
+Will remove IPs with > 20% missing, then impute.
+
+#### Compare raw vs corrected
 
 IIDs 99611 and 99612 (rows 225 and 226) have been dropped in the corrected IPs.
 
@@ -245,29 +643,88 @@ which(ips_raw$IID %in% setdiff(ips_raw$IID, ips$IID))
 ```
 
 
-### Missingness of annotation fields
+#### Low frequency IPs
 
-```{r ip_anno_missingness}
-gg_miss_var(ip_anno, show_pct = TRUE)
+From Roederer2015:
+
+"more than one third were eliminated from analyses as they represented subset frequencies that were too low for robust analysis (less than 0.1% of the parental ‘‘lineage’’ gate)." (Fig S4)
+
+and 
+
+"First, we eliminated those CSFs whose mean frequency (within their parent ‘‘lineage’’) was below 0.1% or above 99%" (section "Selection of Subsets for Heritability and GWAS Analysis", p S2)
+
+First attempt: calculate per-IP total signal over samples, and express as proportion of per-lineage (column 'lineage' in ip_anno) sum of per-IP totals
+
+But problem:'tri-boolean' gates are partially overlapping -> parent lineage signal < sum(contained signals)
+
+```{r low-freq-ips}
+# data.table for speed
+# by taking mean (rather than sum) per feature, downstream analysis is not affected by per-feature proportion missing
+
+# join in lineage info
+# https://stackoverflow.com/questions/30944116/r-data-table-subgroup-weighted-percent-of-group
+setkey(ip_raw_mean, set_name)
+setkey(ip_anno_dt, set_name)
+ip_raw_mean[ip_anno_dt[source != "Lin" & source != "MFI",.(set_name, lineage)], 
+            nomatch=0][
+              , 
+              .(mean_sign = mean_signal, 
+                  tot_lin_signal = sum(mean_signal),
+                  prop = mean_signal/sum(mean_signal)),
+              by=lineage
+              ]
+
 ```
 
-### Find higher grouping of IPs
 
-'composite_lin_source':
+New approach: treat relative cell counts 'as-is'. The two quotes above differ in whether subsets above 99% are also discarded or not.
 
-- for lineage/MFI features: 'Source' column (value = 'Lin' or 'MFI')
-- 'Lineage' for all others (value=lineage on which the subset is calculated)
+```{r low-freq-ips2}
+ip_raw_mean[, table(mean_signal < 1e-3 | mean_signal >0.99)]
+ip_raw_mean[, table(mean_signal < 1e-3)]
+ip_raw_mean[, table(mean_signal >0.99)]
 
-```{r composite_lin_source_count}
-count(ip_anno, composite_lin_source) %>% 
-  arrange(desc(n))
-  # View()
-  
 ```
 
-### Marginal distributions
+Only a small proportion of subsets are below 0.1% relative frequency. In contrast, with the criterion of excluding both low and high relative frequency subsets (as in Roederer2015, section "Selection of Subsets for Heritability and GWAS Analysis"), the proportion of subsets which fit this definition (42%) is roughly similar to Roederer2015 (37%).
+
+```{r}
+
+mean(ip_raw_mean[,mean_signal < 1e-3 | mean_signal >0.99])
+
+# Roederer2015
+1-49928/78683
+```
+
+
+
+
+#### Marginal distributions (after correction for age + (1|batch))
 
 see PDF for subset of IPs
+
+## Sample overlap
+
+409 participants in intersection of glycans and immunophenotypes.
+
+```{r}
+venn <- venn.diagram(list(ips = ips$IID, igx = glycans$IID), filename = NULL)
+grid.draw(venn)
+```
+
+
+## Batch effects
+
+Quantile normalisation (applied to both 'corrected' datasets as pre-processing step in PopPAnTe).
+
+* Main assumption/impact: forces the distribution of signals (over probes/glycans/FACS) to be identical in each sample
+    + Thus removes global differences between samples, i.e. global upregulation will not be detectable
+    
+```{r}
+s <- svd(glycans[-(1:5)])
+
+```
+
 
 # Analysis of univariate results
 
@@ -330,16 +787,18 @@ ggplot(ungroup(n_associated_m), aes(x=fdr_threshold, y=prop, colour=omic))+
 
 ## Explore top associations
 
+
+
 ```{r top-associations}
 ip_igx_univar_good_anno <- readd(ip_igx_univar_good_anno)
 
 
-arrange(ip_igx_univar_good_anno, pvalue) %>% dplyr::select(response, IgX, predictor, composite_lin_source, pvalue) %>% head(100)
+# arrange(ip_igx_univar_good_anno, pvalue) %>% dplyr::select(response, IgX, predictor, composite_lin_source, pvalue) %>% head(100)
 
-ip_igx_univar_good_anno %>%
-  head(10000) %>% 
-  count(IgX, composite_lin_source)%>%
-  arrange(IgX, desc(n)) 
+# ip_igx_univar_good_anno %>%
+#   head(10000) %>% 
+#   count(IgX, composite_lin_source)%>%
+#   arrange(IgX, desc(n)) 
   # View()
 
 
@@ -369,6 +828,8 @@ ip_lin_source_enrich_overall <- ip_igx_univar_good_anno %>%
          ) %>% 
   dplyr::select(composite_lin_source, n_assoc, n_feat, `n_assoc/n_feat`, everything()) %>% 
   arrange(desc(`n_assoc/n_feat`))
+
+ip_lin_source_enrich_overall
 write_csv(ip_lin_source_enrich_overall, path = glue("{resultdir}/ip_lin_source_enrich_overall.csv"))
 
 ```
@@ -390,11 +851,12 @@ ip_lin_source_enrich_byIgX <- ip_igx_univar_good_anno %>%
          ) %>% 
   dplyr::select( IgX,composite_lin_source, n_assoc, n_feat, `n_assoc/n_feat`, everything()) %>% 
   arrange(IgX, desc(`n_assoc/n_feat`))
+
+ip_lin_source_enrich_byIgX
 write_csv(ip_lin_source_enrich_byIgX, path = glue("{resultdir}/ip_lin_source_enrich_byIgX.csv"))
 
 
 ```
-
 
 
 #### continuous ~ FDR
@@ -421,9 +883,11 @@ p_IgG_enrich <- tibble(cum_IgG_perc = running_IgG_perc,
 # ggsave(p_IgG_enrich, filename = glue("{figdir}/p_IgG_enrich.png"),
 #        width = 6, height = 6, dpi = 600)
 
+p_IgG_enrich
+
 ```
 
-##### Lin-source enrichment
+##### IP subgroup enrichment
 
 Overall:
 
@@ -440,6 +904,7 @@ p_lin_source_enrich <- lin_source_props_df %>%
 # ggsave(p_lin_source_enrich, filename = glue("{figdir}/p_lin_source_enrich.png"),
 #        width = 6, height = 6, dpi = 600)
 
+p_lin_source_enrich
 
 ```
 
@@ -459,6 +924,7 @@ p_lin_source_IgX_enrich <- lin_source_IgX_props_df %>%
 # ggsave(p_lin_source_IgX_enrich, filename = glue("{figdir}/p_lin_source_IgX_enrich.png"),
 #        width = 6, height = 6, dpi = 600)
 
+p_lin_source_IgX_enrich
 
 ```
 
@@ -466,22 +932,25 @@ p_lin_source_IgX_enrich <- lin_source_IgX_props_df %>%
 
 # Correlation structures
 
-Non-trivial due to family clustering, either:
 
-    - work with residuals of linear mixed effect model
-    - explicitly model family structure to calculate correlations
-    - use PopPAnTe? IF variables in regression are on same scale, correlation coefficient = regression coefficient (https://en.wikipedia.org/wiki/Simple_linear_regression#Fitting_the_regression_line)
-        - links to question of quantile-normalisation
+## Family clustering
 
-## family-adjusted correlations
+### Options to deal with family clustering
 
-### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
+* work with residuals of linear mixed effect model
+* explicitly model family structure to calculate correlations
+* use PopPAnTe? IF variables in regression are on same scale, correlation coefficient = regression coefficient (https://en.wikipedia.org/wiki/Simple_linear_regression#Fitting_the_regression_line)
+    + links to question of quantile-normalisation (see above, batch effects)
+
+### bivariate multi-level model
+
+#### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
 
 Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
 
 unanswered SO on same subject: https://stats.stackexchange.com/questions/81220/multivariate-mixed-model-in-nlme
 
-Extra catch: would need to re-implement first phases of WGCNA, because these only take raw data, not pre-computed correlations
+Extra catch: would need to re-implement/by-pass first phases of WGCNA, because these only take raw data, not pre-computed correlations
 
 
 *Excellent ref:*
@@ -495,7 +964,7 @@ Luo, J., D’Angelo, G., Gao, F., Ding, J., Xiong, C., 2015. Bivariate correlati
 
 From following refs it seems that only within-cluster BCC is estimable with lme4.
 
-However, the models of Luo2015 is also implemented on melted data! (see their appendix)
+However, the model of Luo2015 is also implemented on melted data! (see their appendix)
 
 method via melting the data (multivariate -> repeated measures) in lme4
 https://mac-theobio.github.io/QMEE/MultivariateMixed.html#a-trick-to-do-multivariate-mixed-models-using-lme4
@@ -512,23 +981,26 @@ Meinck, S., Rodriguez, M.C., 2013. Considerations for correlation analysis using
 Rosner, B., Glynn, R.J., 2017. Estimation of rank correlation for clustered data. Statistics in Medicine 36, 2163–2186. https://doi.org/10.1002/sim.7257
 Rosner, R., 2016. Marginal Association Measures for Clustered Data.
 
-## LME-residual approach
+### correlation of LME residuals
 
-### LMM assumptions
+#### LMM assumptions
 
 
 
-### Within-modality
+#### Within-modality
 
-#### Glycans
+##### Glycans
 
-##### V1: plate as mixed effect
+###### V1: plate as mixed effect
 
 Groups are non-nested, in the sense of Gelman2007, p244 ("overlapping categories"). This implies that HLMdiag *cannot* be used.
 
-```{r glycan-lmer-plate-random}
+```{r glycan-lmer-plate-random, eval=FALSE}
 
-glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
+glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + (1|Plate_NO),
+                    glycans_raw %>% 
+                      dplyr::mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
+                    )
 # gives boundary fit (see ?isSingular)
 
 
@@ -557,7 +1029,7 @@ for (i in 6:ncol(glycans_raw)){
 
 glycans_fam_adj_old <-glycans_fam_adj_l %>%
   purrr::map(~tibble(res=.x, index=names(.x)) %>%
-        dplyr::right_join(tibble(index=as.character(1:nrow(glycans_raw)))) %>%
+        dplyr::right_join(tibble(index=as.character(1:nrow(glycans_raw))), by="index") %>%
         dplyr::select(res)) %>%
   dplyr::bind_cols() %>%
   rlang::set_names(names(glycans_fam_adj_l))
@@ -567,14 +1039,14 @@ glycans_fam_adj_old <-glycans_fam_adj_l %>%
 ```
 
 
-##### Troubleshoot
+###### Troubleshoot
 
-###### Problem outline
+####### Problem outline
 
 Problems:
 
-- isSingular message for 80/151 glycans
-- convergence warning for 10/151 glycans
+* isSingular message for 80/151 glycans
+* convergence warning for 10/151 glycans
 
 
 Troubleshoot resources:
@@ -582,14 +1054,14 @@ FAQ at https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
   (sections "Convergence warnings" and "Singular models)
   
 Convergence resources:
- - ?convergence
- - lme4 convergence warnings: troubleshooting at https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
+ * ?convergence
+ * lme4 convergence warnings: troubleshooting at https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
  
  Singularity resources:
- - https://stats.stackexchange.com/questions/378939/dealing-with-singular-fit-in-mixed-models
+ * https://stats.stackexchange.com/questions/378939/dealing-with-singular-fit-in-mixed-models
 
 
-```{r glycan-lmer-plate-random-troubleshoot, include=FALSE}
+```{r glycan-lmer-plate-random-troubleshoot, eval=FALSE}
 # reason for boundary fit: not that FID and plate are strictly aliased
 dplyr::summarise_all(glycans_raw[,1:4],n_distinct)
 glycans_raw %>%
@@ -631,46 +1103,53 @@ plate_var_overview %>%
 ```
 
 
-###### Try different optimizers (allFit), following ?convergence
+####### Try different optimizers (allFit), following ?convergence
 
 IgG4_A2G has only the convergence problem.
 
 
-```{r glycan-lmer-plate-random-allfit, include=FALSE}
-# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
-# fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
-#             control = lmerControl(optimizer = "nlminbwrap"))
-# allfits <- allFit(fit)
-# isOK <- sapply(allfits,is,"merMod")
-# lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
+```{r glycan-lmer-plate-random-allfit, eval=FALSE}
+fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw)
+fit <- lmer(IgG4_A2G ~ (1|FID) + Sex*Age + (1|Plate_NO), glycans_raw,
+            control = lmerControl(optimizer = "nlminbwrap"))
+allfits <- allFit(fit)
+isOK <- sapply(allfits,is,"merMod")
+lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
 
 ```
 
 
-##### V2: plate as fixed effect
+###### V2: plate as fixed effect
 
 See section "Should I treat factor xxx as fixed or random?" in https://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
 
 "For practical purposes, there must be a reasonable number of random-effects levels (e.g. blocks) – more than 5 or 6 at a minimum. This is not surprising if you consider that random effects estimation is trying to estimate an among-block variance"
 
-ENI1H5N4F0S1 has only the singularity problem
+ENI1H5N4F0S1 has only the singularity problem.
 
-```{r glycan-lmer-plate-fixed, include=FALSE}
-fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw)  #ok
+Other potential issue: LME does not deal with fact that some families are MZ, others are DZ. Distribution on FID effects is probably not pure gaussiam, but mixture of a MZ and DZ distribution with different mean family effects and potentially also different variance of the family effects.
+
+Groups are no longer non-nested (there is only one random variable), in the sense of Gelman2007, p244 ("overlapping categories"). This implies that HLMdiag *CAN* be used.
+
+```{r glycan-lmer-plate-fixed, eval=FALSE}
+glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age + Plate_NO,
+                    glycans_raw %>% 
+                      dplyr::mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
+                    )
 
 glycans_fam_adj <- readd(glycans_fam_adj)
 ```
 
 Completely solves the singularity problem + reduces number of non-convergence warnings to 1 (LAGY_A2B). This is further resolved by using a different optimizer.
 
-```{r glycan-lmer-plate-fixed-testcase, include=FALSE}
+```{r glycan-lmer-plate-fixed-testcase, eval=FALSE}
 fit <- lmer(LAGY_A2B ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw, 
             control = lmerControl(optimizer = "nlminbwrap"))
 ```
 
-##### compare new to old residuals
+###### compare new to old residuals
 
-```{r glycan-lmer-plate-fixedVSrandom, include=FALSE}
+```{r glycan-lmer-plate-fixedVSrandom, eval=FALSE}
 
 res_comp <- dplyr::bind_cols(
   tidyr::gather(glycans_fam_adj, glycan, new_res),
@@ -693,7 +1172,7 @@ boxplot(res_comp$new_res)
 ```
 
 
-#### Immunophenotypes
+##### Immunophenotypes
 
 ### Cross-Modality
 
@@ -723,7 +1202,9 @@ boxplot(res_comp$new_res)
 
 # WGCNA
 
-Objective of WGCNA is not necessarily globally optimal partitioning, but rather detection of meaningful modules. Grey module is allowed to be very heterogeneous. How to deal with "grey" module?
+Objective of WGCNA is not necessarily globally optimal partitioning, but rather detection of meaningful modules. Grey module is allowed to be very heterogeneous. Also, scale-free property is mostly a heuristic to downscale noise via the power transform, rather than based on theoretical arguments from network/graph theory. Ref Peter Langfelder, Bioconductor forum, https://support.bioconductor.org/p/66101/ [24/04/2019].
+
+How to deal with "grey" module?
 
 - treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?  <- current approach
 - all grey members as singleton clusters?
@@ -748,7 +1229,7 @@ glycans_scale_free$p_k
 
 
 
-```{r glycans-parameter-exploration}
+```{r glycans-parameter-exploration, include=FALSE}
 
 glycan_module_stats <- readd(glycan_module_stats)
 
@@ -767,13 +1248,15 @@ glycan_module_stats$mod_modularities
 #TODO: retrieve ref for remark
 
 
+```
+
+Networks:
+```{r glycans-parameter-exploration-plots}
 for (i in seq_along(glycan_module_stats$plots)){
   draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
 }
 
-
 ```
-
 
 
 In IgA:
@@ -805,7 +1288,7 @@ glycans_scale_free_noderiv$p_k
 ```
 
 
-```{r glycans-parameter-exploration-noderiv}
+```{r glycans-parameter-exploration-noderiv, include=FALSE}
 
 glycan_module_stats_noderiv <- readd(glycan_module_stats_noderiv)
 
@@ -819,15 +1302,16 @@ glycan_module_stats$mod_modularities
 #TODO: retrieve ref for remark
 
 
-#generate plots
+```
 
-  
+Networks:
+
+```{r glycans-parameter-exploration-noderiv-plots}
 for (i in seq_along(glycan_module_stats$plots)){
   draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
 }
-
-
 ```
+
 
 Compared to WGCNA including derivered traits:
 
@@ -835,17 +1319,17 @@ Optimal set parameter set is the same (network 2, iteration 3), with slightly hi
 
 In IgA:
 
-- In HYT (IgA - Ser89-126): *recovered* three blocks with strong positive intra-block and negative inter-block correlations:
+* In HYT (IgA - Ser89-126): *recovered* three blocks with strong positive intra-block and negative inter-block correlations:
 
-    - H>3, high S
-    - H>3, low S
-    - H < 5
+    + H>3, high S
+    + H>3, low S
+    + H < 5
 
-- cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those sites: *not retrieved*
+* cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those sites: *not retrieved*
 
 In IgG:
 
-- IgGI low fucose, low SA cluster *is recovered*
+* IgGI low fucose, low SA cluster *is recovered*
 
 ### General remarks
 
@@ -863,8 +1347,9 @@ ENI1H5N4F0S1 and ENI1H5N4F0S2 are strongly negatively correlated.
 LAGY1H5N4F0S2 and LAGY1H5N4F0S1 are strongly positively correlated.
 
 Could relate to:
-- regulation of reaction: constitutive versus induced?
-- opposite associations with IPs?
+
+* regulation of reaction: constitutive versus induced?
+* opposite associations with IPs?
 
 Some derived traits might be driven primarily by a single glycan. Example: ENI_A2S and ENI1H5N4F0S2
 
