@@ -161,7 +161,7 @@ plan = drake_plan(
   
   report = target(
     command = rmarkdown::render(
-      knitr_in("explore_univariate_igx.Rmd"),
+      knitr_in("EDA.Rmd"),
       output_file = file_out(here::here("results/report.html")),
       quiet = TRUE
     ),

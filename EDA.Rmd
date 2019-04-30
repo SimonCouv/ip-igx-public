@@ -553,7 +553,7 @@ mean(str_detect(ip_anno_dt[str_detect(source, pattern = "P6"), set_name], patter
 ```
 
 
-#### Missingness of annotation fields
+#### Missingness in annotation fields
 
 Note: empty fields in immunophenotype annotation set to NA.
 
@@ -645,6 +645,8 @@ which(ips_raw$IID %in% setdiff(ips_raw$IID, ips$IID))
 
 #### Low frequency IPs
 
+##### Replicate strategy Roederer2015
+
 From Roederer2015:
 
 "more than one third were eliminated from analyses as they represented subset frequencies that were too low for robust analysis (less than 0.1% of the parental ‘‘lineage’’ gate)." (Fig S4)
@@ -696,6 +698,16 @@ mean(ip_raw_mean[,mean_signal < 1e-3 | mean_signal >0.99])
 1-49928/78683
 ```
 
+##### IP frequency distribution
+
+```{r ip-freq-distr}
+
+ip_raw_mean[order(-mean_signal)]
+
+boxplot(ip_raw_mean[, mean_signal])
+
+
+```
 
 
 
