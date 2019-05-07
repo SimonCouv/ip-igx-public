@@ -18,9 +18,20 @@ plan = drake_plan(
   IgA_anno_names_derived = readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
   twin_fam = fread(here("input_data/data_annotations/TwinDetails_110119.csv")),
   
-  # pre-process -------------------------------------------
+  # intersect -------------------------------------------
   
-  # QC filter + FDR
+  overlap_samples_raw = intersect(glycans_raw$IID, ips_raw$IID),
+  overlap_samples = intersect(glycans$IID, ips$IID),
+  
+  glycans_o = glycans[glycans$IID %in% overlap_samples,],
+  glycans_raw_o = glycans_raw[glycans_raw$IID %in% overlap_samples_raw,],
+  
+  ips_o = ips[ips$IID %in% overlap_samples,],
+  ips_raw_o = ips_raw[ips_raw$IID %in% overlap_samples_raw],
+  
+  # pre-process -------------------------------------------
+
+    # QC filter + FDR
   ip_igx_univar_good = ip_igx_univar %>%
     # dplyr::select(predictor) %>% 
     left_join(dplyr::select(ip_anno, set_name, robust_mario_qc), by=c("predictor"="set_name")) %>%
@@ -37,10 +48,10 @@ plan = drake_plan(
     mutate(IgX = ifelse(str_detect(response, pattern = "IgG"), "IgG", "IgA")) %>% 
     dplyr::select(response, IgX, subset_name, composite_lin_source, everything()),
   
-  # missingness filter
+  # glycan missingness filter
   
-  glycans_mf = glycans[rowMeans(is.na(glycans)) < 0.6, colMeans(is.na(glycans)) < 0.6, with=FALSE],
-  glycans_raw_mf = glycans[rowMeans(is.na(glycans_raw)) < 0.6, colMeans(is.na(glycans_raw)) < 0.6, with=FALSE],
+  glycans_omf = glycans_o[, colMeans(is.na(glycans_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
+  glycans_raw_omf = glycans_raw_o[, colMeans(is.na(glycans_raw_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
   
   # IP missingness
   ip_missing = ips[, lapply(.SD, function(x) mean(is.na(x))), .SDcols=-(FID:IID)] %>%
@@ -70,12 +81,14 @@ plan = drake_plan(
   qq = make_univar_qq(v_pval = ip_igx_univar_good$pvalue, fig_path = file_out("results/figures/univar_qqplot.png")),
   
   # glycan marginal distributions pdf
-  raw_glycan_marginal_pdf = make_marginal_plots(glycans_raw_mf[,-(1:5)], fig_path = file_out("results/figures/raw_glycan_marginal_plots.pdf")),  # important as input to lmer models
-  glycan_marginal_pdf = make_marginal_plots(glycans_mf[,-(1:5)], fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),              # important as input to a.o. association scatters
+  raw_glycan_marginal_pdf = make_marginal_plots(glycans_raw_omf[,-(1:5)], fig_path = file_out("results/figures/raw_glycan_marginal_plots.pdf")),  # important as input to lmer models
+  glycan_marginal_pdf = make_marginal_plots(glycans_omf[,-(1:5)], fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),              # important as input to a.o. association scatters
+  
+  # IP marginal distributions pdf
   ip_marginal_pdf = make_marginal_plots(ips[,3:100], fig_path = file_out("results/figures/ips_marginal_plots.pdf")),              # important as input to a.o. association scatters
   
   # top association scatter plots pdf
-  top_assoc_scatter_pdf = make_top_assoc_scatters(ntop = 100, ip_igx_univar_good, glycans_mf, ips, file_path = file_out("results/figures/top_assoc_scatters.pdf")),
+  top_assoc_scatter_pdf = make_top_assoc_scatters(ntop = 100, ip_igx_univar_good, glycans_omf, ips, file_path = file_out("results/figures/top_assoc_scatters.pdf")),
   
   # number of significant IgG, IgA and IP ~ FDR threshold
   n_associated_m = get_fdr_nfeat_associated_univar(fdr_thresholds = seq(0,1,0.01), ip_igx_univar_good = ip_igx_univar_good),
@@ -97,7 +110,7 @@ plan = drake_plan(
   
   # Correlation structures  -------------------------------------------
   
-  glycans_fam_adj = glycans_lmer_adjust(glycans_raw_mf),
+  glycans_fam_adj = glycans_lmer_adjust(glycans_raw_omf),
   glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
   
   

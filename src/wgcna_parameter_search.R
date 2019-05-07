@@ -67,7 +67,7 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
       modules_df <- map_dfc(network_module_data, "dendrocolors") %>% set_names(paste0("cut_iter_", 1:nrow(cut_pars)))
       
       # TODO: deal with grey module separately
-      module_hm <- HeatmapAnnotation(modules_df,
+      module_hm <- HeatmapAnnotation(df=modules_df,
                                      which = "row",
                                      show_legend = FALSE, 
                                      width = unit(3,"cm"),
@@ -75,7 +75,7 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
                                      gp = gpar(col = "white", lwd = 0.5))
       
       modality_df <- data.frame(feat_modality=feat_modality)
-      modality_hm <- HeatmapAnnotation(modality_df,
+      modality_hm <- HeatmapAnnotation(df=modality_df,
                                        which = "row",
                                        show_legend = TRUE,
                                        col=map(as_tibble(modality_df), ~define_colors(.x)),

@@ -14,7 +14,7 @@ glycans_lmer_adjust <- function(glycans_raw){
       mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
     
     tmp <- tryCatch.W.E(
-      lmer(glycan ~ (1|FID) + Plate_NO + Sex*Age, model_data, 
+      lmer(glycan ~ (1|FID) + Plate_NO + Age, model_data, 
            control = lmerControl(optimizer = "nlminbwrap"))
     )
     fits[[igx]] <- tmp$value
