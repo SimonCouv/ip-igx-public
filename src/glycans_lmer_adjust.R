@@ -1,4 +1,4 @@
-glycans_lmer_adjust <- function(glycans_raw){
+glycans_lmer_adjust <- function(glycans_raw, form){
   
   # adjust all glycans
   glycans_fam_adj_l <- list()
@@ -14,7 +14,7 @@ glycans_lmer_adjust <- function(glycans_raw){
       mutate_at(.vars = vars(FID,IID,Plate_NO, Sex), as.factor)
     
     tmp <- tryCatch.W.E(
-      lmer(glycan ~ (1|FID) + Plate_NO + Age, model_data, 
+      lmer(formula = form, model_data, 
            control = lmerControl(optimizer = "nlminbwrap"))
     )
     fits[[igx]] <- tmp$value
