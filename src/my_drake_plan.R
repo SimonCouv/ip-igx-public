@@ -17,6 +17,7 @@ plan = drake_plan(
   IgA_anno_names_raw = readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names"),
   IgA_anno_names_derived = readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
   twin_fam = fread(here("input_data/data_annotations/TwinDetails_110119.csv")),
+  ip_batch = fread(here("/input_data/immuno_poppante_AGE_BATCH.covar")),
   
   # pre-process -------------------------------------------
   
@@ -218,8 +219,8 @@ plan = drake_plan(
                                      stringsAsFactors = FALSE),
   derived_glycan_pos = str_detect(names(glycans_fam_adj), pattern = "_"),
   
-  glycans_scale_free = optimize_network_pars(data=glycans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
-  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free = optimize_network_pars(data=glycans_qn_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_qn_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
   
   # 2. parameter search ~ modularity
   
@@ -231,13 +232,13 @@ plan = drake_plan(
                                 minModuleSize=c(3,5,10,20)),
   glycan_modality = ifelse(str_detect(names(glycans_fam_adj), pattern = "IgG"),"IgG","IgA"),
   
-  glycan_module_stats = wgcna_parameter_search(data=glycans_fam_adj,
+  glycan_module_stats = wgcna_parameter_search(data=glycans_qn_fam_adj,
                                                glycan_network_pars, 
                                                glycan_cut_pars,
                                                glycan_cross_iter_pars, 
                                                create_plot = TRUE,
                                                feat_modality=glycan_modality),
-  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_fam_adj[,!derived_glycan_pos],
+  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_qn_fam_adj[,!derived_glycan_pos],
                                                        glycan_network_pars, 
                                                        glycan_cut_pars,
                                                        glycan_cross_iter_pars, 
