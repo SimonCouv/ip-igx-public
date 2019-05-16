@@ -9,6 +9,14 @@ source(here::here("src/dir_defs.R"))
 source(here::here("src/my_drake_plan.R"))
 # source(here::here())
 
+# see https://ropenscilabs.github.io/drake-manual/hpc.html#parallel-computing-within-targets
+# furrr recommends (https://davisvaughan.github.io/furrr/index.html):
+# future::plan(multiprocess)
+# BUT, this does not work with drake. ERROR: " Having problems with parallel::mclapply(), future::future(), or furrr::future_map() in drake? Try one of the workarounds at https://ropenscilabs.github.io/drake-manual/hpc.html#parallel-computing-within-targets or https://github.com/ropensci/drake/issues/675. "
+# instead, use future.callr packages, which provides the futures API (to work with furrr) on top of callr backend (to play nice with drake).
+
+future::plan(future.callr::callr, workers = 3L)
+
 # graph of workflow
 config <- drake_config(plan)
 vis_drake_graph(config)
