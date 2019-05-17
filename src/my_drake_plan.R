@@ -1,23 +1,23 @@
 plan = drake_plan(
   
   # load data -------------------------------------------
-  glycans = fread(here("input_data/glycans_corrected_20190409.csv")),
-  glycans_raw = fread(here("input_data/glycans_raw.csv")),  
+  glycans = fread(file_in("input_data/glycans_corrected_20190409.csv")),
+  glycans_raw = fread(file_in("input_data/glycans_raw.csv")),  
   # IPs
-  ips = fread(here("input_data/immunopheno.corrected.csv")),
-  ips_raw = fread(here("input_data/immunopheno.raw.csv")),
+  ips = fread(file_in("input_data/immunopheno.corrected.csv")),
+  ips_raw = fread(file_in("input_data/immunopheno.raw.csv")),
   #Popante output
-  ip_igx_univar = fread(here("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
+  ip_igx_univar = fread(file_in("input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv"), header = TRUE) %>%
     set_names(names(.) %>% tolower(.) %>% str_replace_all(., c("\\^"="", "[\\.]+"="_"))),
   # annotations
-  ip_anno = fread(here("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
+  ip_anno = fread(file_in("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
     mutate_all(na_if, y="") %>%   # set all empty string fields to NA 
     set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
     mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage)),
-  IgA_anno_names_raw = readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names"),
-  IgA_anno_names_derived = readxl::read_xlsx(here("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
-  twin_fam = fread(here("input_data/data_annotations/TwinDetails_110119.csv")),
-  ip_batch = fread(here("/input_data/immuno_poppante_AGE_BATCH.covar")),
+  IgA_anno_names_raw = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names"),
+  IgA_anno_names_derived = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
+  twin_fam = fread(file_in("input_data/data_annotations/TwinDetails_110119.csv")),
+  ip_batch = fread(file_in("input_data/immuno_poppante_AGE_BATCH.covar")),
   
   # pre-process -------------------------------------------
   
@@ -56,18 +56,6 @@ plan = drake_plan(
   ips_omf = ips_o[, colMeans(is.na(ips_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
   ips_raw_omf = ips_raw_o[, colMeans(is.na(ips_raw_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
   
-  # IP mean per-feature relative counts
-  ip_raw_mean = ips_raw_o[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
-    data.table::transpose(.) %>%
-    .[,.(set_name = colnames(ips_raw_o)[-(1:2)],
-         mean_signal = V1)
-      ],
-  ip_mean = ips_o[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
-    data.table::transpose(.) %>%
-    .[,.(set_name = colnames(ips_o)[-(1:2)],
-         mean_signal = V1)
-      ],
-  
   # intersect filtered datasets
   
   overlap_omf_samples_raw = intersect(glycans_raw_omf$IID, ips_raw_omf$IID),
@@ -79,10 +67,22 @@ plan = drake_plan(
   ips_omfo = ips_omf[ips_omf$IID %in% overlap_omf_samples,],
   ips_raw_omfo = ips_raw_omf[ips_raw_omf$IID %in% overlap_omf_samples_raw],
   
+  # IP mean per-feature relative counts
+  ip_raw_mean = ips_raw_omfo[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
+    data.table::transpose(.) %>%
+    .[,.(set_name = colnames(ips_raw_o)[-(1:2)],
+         mean_signal = V1)
+      ],
+  ip_mean = ips_omfo[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
+    data.table::transpose(.) %>%
+    .[,.(set_name = colnames(ips_o)[-(1:2)],
+         mean_signal = V1)
+      ],
+  
   # quantile normalize
   glycans_raw_omfo_qn = cbind(
     glycans_raw_omfo[,1:5],
-    normalize.quantiles(as.matrix(glycans_raw_omfo[,-(1:5)]))
+    normalize.quantiles(scale(as.matrix(glycans_raw_omfo[,-(1:5)])))
   ) %>% set_names(names(glycans_raw_omfo)),
   
   
@@ -226,7 +226,7 @@ plan = drake_plan(
   
   glycan_cross_iter_pars = list(figdir = "results/figures/WGCNA_pars/glycans/"),
   
-  glycan_network_pars = read_tsv("WGCNA_parameters/glycan_pars.tsv") %>%
+  glycan_network_pars = read_tsv(file_in("WGCNA_parameters/glycan_pars_qn_famadj.tsv")) %>%
     dplyr::select(-aim),
   glycan_cut_pars = expand.grid(deep =c(4, 1),
                                 minModuleSize=c(3,5,10,20)),

@@ -141,9 +141,6 @@ ips_raw_omfo <- readd(ips_raw_omfo)
 ip_raw_mean <- readd(ip_raw_mean)
 ip_mean <- readd(ip_mean)
 
-# family-adjusted values
-glycans_fam_adj <- readd(glycans_fam_adj)
-
 # QC: batch effects: quantile normalisated glycans
 glycans_raw_omfo_qn <- readd(glycans_raw_omfo_qn)
 # QC: batch effects: riPCA-imputed glycans
@@ -152,6 +149,10 @@ glycans_imp <- readd(glycans_imp) #list over all datasets
 glycans_pca <- readd(glycans_pca) #list over all datasets
 # QC: batch effects: formal test
 glycans_gPCA <- readd(glycans_gPCA)
+
+# family-adjusted values
+glycans_fam_adj <- readd(glycans_fam_adj)
+glycans_qn_fam_adj <- readd(glycans_qn_fam_adj)
 
 # Popante results --------------------------------------------------------------
 ip_igx_univar <- readd(ip_igx_univar)
@@ -168,6 +169,7 @@ ip_anno_dt <- data.table(ip_anno)
 IgA_anno_names_raw <- readd(IgA_anno_names_raw)
 IgA_anno_names_derived <- readd(IgA_anno_names_derived)
 twin_fam <-readd(twin_fam)
+ip_batch <- readd(ip_batch)
 
 # WGCNA --------------------------------------------------------------
 glycans_scale_free <- readd(glycans_scale_free)
@@ -493,6 +495,15 @@ dim(ips_raw_o)
 
 ### Feature annotations
 
+#### Overlap feature IDs in data and annotations
+
+1 feature does not have annotations:
+
+```{r}
+setdiff(names(ips_raw), ip_anno_dt$set_name)
+```
+
+
 #### Structure of dataset (feature hierarchy)
 
 Overview resolved issues:
@@ -721,6 +732,13 @@ count(ip_anno, composite_lin_source) %>%
 
 ### Features
 
+overall 3.4% missing:
+
+```{r}
+mean(ip_missing$missing_prop)
+```
+
+
 #### Missing samples per feature
 
 Histogram of proportion missing samples per feature:
@@ -807,6 +825,14 @@ ips_sample_drop %>%
 
 ```
 
+
+In missingness-filtered and overlapped dataset: 2.5% missing:
+
+```{r}
+mean(is.na(ips_raw_omfo))
+```
+
+
 #### Low frequency IPs
 
 ##### Replicate strategy Roederer2015
@@ -883,26 +909,32 @@ boxplot(ip_mean[, mean_signal])
 ```{r}
 variances <- apply(ips_raw_omfo[,-(1:2)],2,var, na.rm=TRUE)
 means <- apply(ips_raw_omfo[,-(1:2)],2,mean, na.rm=TRUE)
-cvs <- apply(ips_raw_omfo[,-(1:2)],2, function(x){sd(x, na.rm=TRUE)/mean(x,na.rm=TRUE)})
+CVs <- sqrt(variances)/abs(means)
 
-cbind(means, variances, cvs) %>% 
-  as_tibble() %>% 
-  tidyr::gather(statistic, value) %>% 
+feature_sumstat_df <- cbind(means, variances, CVs, feature = names(ips_raw_omfo)[-(1:2)]) %>% 
+  as_tibble() %>%
+  tidyr::gather(statistic, value, -feature) %>% 
+  left_join(ip_anno[c("set_name", "composite_lin_source")], by=c("feature"="set_name")) %>% 
+  mutate(type=ifelse(composite_lin_source=="MFI", "SPEL", "CSF"),
+         value=as.numeric(value))
+
+feature_sumstat_df %>% 
+  mutate(value=as.numeric(value)) %>% 
+  nest(-one_of("type","statistic")) %>% 
+  drop_na() %>% 
+  mutate(quantiles = map(data, ~quantile(.x$value, na.rm = TRUE)),
+         quantiles2=map(quantiles, ~bind_rows(.x) %>% gather())) %>% 
+  unnest(quantiles2)  %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+sumstat_p <-feature_sumstat_df %>% 
+  drop_na() %>% 
   ggplot(aes(x="", y=value))+
   geom_boxplot()+
-  facet_wrap(~statistic, scales="free")
+  facet_wrap(~type+statistic, scales="free")
 
-
-top_cvs_vars <- tibble(feature = names(cvs), cvs = cvs) %>%
-  top_n(round(0.0001*length(cvs)), wt=cvs)
-ips_raw_omfo %>% 
-  dplyr::select(!!top_cvs_vars$feature) %>% 
-  # head()
-  tidyr::gather(feature,value) %>% 
-  ggplot(aes(x=feature, y=value))+
-  geom_boxplot()
-
-
+sumstat_p
 
 ```
 
@@ -937,7 +969,7 @@ grid.draw(venn)
 
 ## Batch effects/global differences between samples
 
-see notes 30/04.
+see notes 30/04: concern is any sample-specific biases, but plate/batch is only available metadata to study these -> focus on batch effects
 After meeting 2/5: less focus on batch effects. More importantly: glycans are compositional data
 
 ### glycans
@@ -955,12 +987,120 @@ sd(apply(glycans_raw_omfo[,-(1:5)], 1, sum), na.rm = TRUE)/mean(apply(glycans_ra
 # sd(apply(glycans_raw[,-(1:5)], 1, mean), na.rm = TRUE)/mean(apply(glycans_raw[,-(1:5)], 1, mean), na.rm = TRUE)
 ```
 
+#### Experimental design glycans
+
+```{r exp-design-overlap}
+
+design_overlap <- glycans_raw[,1:5] %>%
+  dplyr::left_join(twin_fam, by=c("FID"="Family_No", "IID"="STUDY_NO", "Sex"="SEX")) %>% 
+  dplyr::filter(IID %in% ips_raw$IID) 
+
+ggplot(design_overlap, aes(x=factor(Plate_NO), fill=ETHNICITY))+
+  geom_bar(position = "fill")+
+  ylab("proportion")
+ggplot(design_overlap, aes(x=factor(Plate_NO), fill=ACTUAL_ZYGOSITY))+
+  geom_bar(position = "fill")+
+  ylab("proportion")
+ggplot(design_overlap, aes(x=factor(Plate_NO), fill=Sex))+
+  geom_bar(position = "fill")+
+  ylab("proportion")
+ggplot(design_overlap, aes(x=factor(Plate_NO), y=Age))+
+  geom_boxplot()+
+  stat_n_text()
+
+```
+
+
+#### Quantile normalisation
+
+Scaling important before quantile normalisation, because otherwise all samples get assigned the same values and all variance is removed from features. Extreme example:
+
+lowest value per sample is always v1, second is always v2, etc
+
+mean of lowest values is just mean of v1, mean of second lowest is just mean of v2, etc
+
+each sample gets assigned exactly the same values
+
+```{r}
+
+toy_df <- seq(-50,50,by=10) %>% 
+  map(~rnorm(200, mean=.x,sd=3)) %>% 
+  bind_cols() %>% 
+  as.matrix()
+
+# simulate some batch effect
+toy_batch <- rep(1:5, each=40)
+# toy_batch_effect <- rep(seq(0.6,1.4,by=0.2), each=40)
+# toy_df_batch <- toy_df*toy_batch_effect
+toy_batch_effect <- rep(seq(-1,1,by=0.5), each=40)
+toy_df_batch <- toy_df+toy_batch_effect
+
+#scale features
+toy_df_batch_scale <- scale(toy_df_batch)
+
+# quantile normalise
+toy_df_qn <- t(normalize.quantiles(t(toy_df_batch)))  #per quantile, the corresponding feature is identical for each sample -> 
+toy_df_scale_qn <- t(normalize.quantiles(t(toy_df_batch_scale)))
+
+par(mfrow=c(5,2))
+boxplot(toy_df, main="variables [before batch effect]")
+boxplot(t(toy_df), main="samples [before batch effect]")
+
+boxplot(toy_df_batch, main="variables [batch effect]")
+boxplot(t(toy_df_batch), main="samples [batch effect]")
+
+boxplot(toy_df_batch_scale, main="variables [BE, variables scaled]")
+boxplot(t(toy_df_batch_scale), main="samples [BE, variables scaled]")
+
+boxplot(toy_df_qn, main="variables [with BE] QN")
+boxplot(toy_df_scale_qn, main="variables [with BE, scaled] QN")
+
+boxplot(t(toy_df_qn), main="samples [with BE] QN")
+boxplot(t(toy_df_scale_qn), main="samples [with BE, scaled] QN")
+
+par(mfrow=c(4,2))
+corrplot::corrplot(cor(toy_df), method = "color", type = "lower", main="truth", col=blueWhiteRed(100))
+hist(ifelse(1-diag(11),cor(toy_df), NA), main="truth")
+
+corrplot::corrplot(cor(toy_df_batch), method = "color", type = "lower", main="batch", col=blueWhiteRed(100))
+hist(ifelse(1-diag(11),cor(toy_df_batch), NA), main="batch")
+
+corrplot::corrplot(cor(toy_df_qn), method = "color", type = "lower", main="qn", col=blueWhiteRed(100))
+hist(ifelse(1-diag(11),cor(toy_df_qn), NA), main="qn")
+
+corrplot::corrplot(cor(toy_df_scale_qn), method = "color", type = "lower", main="scale qn", col=blueWhiteRed(100))
+hist(ifelse(1-diag(11),cor(toy_df_scale_qn), NA), main="scale qn")
+
+par(mfrow=c(1,1))
+
+
+
+
+```
+
 
 #### regularised iterative PCA imputation (integrated imputation and PCA)
 
-Goal: compare principal components between batches.
+Goal: compare principal components between batches, for different datasets:
 
-problem: missing data. proportion missing=
+- 'raw' glycan data
+- glycan data corrected for age*sex + (1|batch)
+- quantile normalised glycan data
+- glycan data adjusted via lmer(glycan ~ (1|FID) + Plate_NO + Age)
+- quantile normalized glycan data adjusted via lmer(glycan ~ (1|FID) + Age))
+
+```{r}
+
+par(mfrow=c(5,1))
+boxplot(glycans_raw_omfo[,-(1:5)], main="raw")
+boxplot(glycans_omfo[,-(1:5)], main="corrected: glycan ~ age*sex+ (1|plate)")
+boxplot(glycans_raw_omfo_qn[,-(1:5)], main="qn")
+boxplot(glycans_fam_adj, main="famajd: glycan ~ (1|FID) + plate + Age")
+boxplot(glycans_qn_fam_adj, main="qn_famadj: glycan ~ (1|FID) + Age)")
+
+```
+
+problem: missing data. proportion missing (in raw glycan data)=
 
 ```{r}
 mean(is.na(glycans_raw_omfo[,-(1:5)]))
@@ -985,42 +1125,45 @@ map(glycans_pca, "eig") %>%
 Boxplots PCs per plate.
 
 ```{r}
-
+plot_npc <- 5
 # cbind PCs with plate numbers
-  map2(
+pc_plot_data <-  map2(
     .x = glycans_pca,
     .y = list(glycans_raw_omfo,
               glycans_omfo,
               glycans_raw_omfo_qn,
+              glycans_raw_omfo,
               glycans_raw_omfo),
     .f = function(x,y,...){
-      cbind(y[, 'Plate_NO'], x$ind$coord)
+      cbind(y[, 'Plate_NO'], x$ind$coord[,1:plot_npc])
     },
   ) %>%
-  
+
   # gather, clean then combine datasets in single df for plotting
   purrr::map(~ group_by(.x, Plate_NO) %>% 
                mutate(n_plate=n(),
                       plate_long = glue("{Plate_NO} (n={n_plate})")) %>% 
-               tidyr::gather( PC, value, -one_of(c("Plate_NO", "n_plate", "plate_long"))) %>% 
-               dplyr::mutate(PC = factor(PC, levels = paste0("Dim.", 1:15)))) %>% 
-  bind_rows(.id = "dataset") %>% 
-  # head()
+               tidyr::gather( PC, value, -one_of(c("Plate_NO", "n_plate", "plate_long")))
+               # dplyr::mutate(PC = factor(PC, levels = paste0("Dim.", 1:15)))
+             ) %>% 
+  bind_rows(.id="dataset")
   
-  # make boxplot
-  ggplot(aes(x=as.factor(plate_long), y=value, fill=dataset))+
-  geom_boxplot()+
+# make boxplot
+ggplot(pc_plot_data, aes(x=as.factor(plate_long), y=value, fill=dataset))+
+  geom_boxplot(show.legend = FALSE)+
   # stat_n_text(y.pos = -30)+
-  facet_grid(.~PC, scales="free")+
-  coord_flip()
+  facet_grid(dataset~PC, scales="free")+
+  scale_fill_discrete(name=NA)+
+  coord_flip()+
+  xlab("plate")+
+  ylab("PC value")
+
 
 ```
 
 #### Hierarchical clustering of samples
 
 ```{r, eval=FALSE}
-
-boxplot(apply(imp_glycans_raw_omf[,-1], 1, sum))
 
 data <- glycans_imp$raw$completeObs
 sc <- scale(data)
@@ -1054,72 +1197,67 @@ km <- kmeans(sc, centers = n_distinct(glycans_raw_omfo$Plate_NO))
 dist(bind_rows(glycans_raw[1,-(1:5)], glycans_raw[35,-(1:5)]))
 all(is.na(glycans_raw[1,-(1:5)]) | is.na(glycans_raw[35,-(1:5)]))
 
-
 ```
 
 #### Formal test: gPCA
 
+Borderline batch effects in raw data. Fitting a separate model in each plate might lead to loss of information. Therefore used residuals of LMM without plate effect, but on quantile-normalised data, as input to correlation analyses.
+
 ```{r}
 library(gPCA)
-
-glycans_gPCA = future_map2(
-  .x = glycans_imp,
-  .y = list(glycans_raw_omfo,
-            glycans_omfo,
-            glycans_raw_omfo_qn,
-            glycans_raw_omfo),
-  .f = function(x,y,...){
-    gPCA.batchdetect(x=x$completeObs, 
-                     batch=y$Plate_NO)
-  },
-  center = FALSE,
-  scaleY = TRUE
-)
 
 map(glycans_gPCA, "p.val")
 
 ```
 
+For reference, correlation distribution of micro-array data in Reese2013.
 
-### Experimental design glycans
+```{r}
+library(gPCA)
+data("caseDat")
+# data("lowpheDat") # unavailable
 
-```{r exp-design-overlap}
+casedat_cor <- cor(caseDat$data)
+hist(casedat_cor)
+```
 
-design_overlap <- glycans_raw[,1:5] %>%
-  dplyr::left_join(twin_fam, by=c("FID"="Family_No", "IID"="STUDY_NO", "Sex"="SEX")) %>% 
-  dplyr::filter(IID %in% ips_raw$IID) 
 
-ggplot(design_overlap, aes(x=factor(Plate_NO), fill=ETHNICITY))+
+
+### IPs
+
+#### Experimental design
+
+2 samples have no information on batch.
+
+```{r}
+ip_design_omfo <- ips_raw_omfo[,1:2] %>% 
+  left_join(twin_fam, by=c("FID"="Family_No", "IID"="STUDY_NO")) %>% 
+  left_join(ip_batch, by=c("FID", "IID")) 
+
+# summarise_all(ip_design_omfo, function(x)mean(is.na(x)))
+summarise_all(ip_design_omfo, function(x)sum(is.na(x)))
+
+dplyr::filter(ip_design_omfo, is.na(batch))
+
+```
+
+
+```{r}
+
+ggplot(ip_design_omfo, aes(x=factor(batch), fill=ETHNICITY))+
   geom_bar(position = "fill")+
   ylab("proportion")
-ggplot(design_overlap, aes(x=factor(Plate_NO), fill=ACTUAL_ZYGOSITY))+
+ggplot(ip_design_omfo, aes(x=factor(batch), fill=ACTUAL_ZYGOSITY))+
   geom_bar(position = "fill")+
   ylab("proportion")
-ggplot(design_overlap, aes(x=factor(Plate_NO), fill=Sex))+
+ggplot(ip_design_omfo, aes(x=factor(batch), fill=SEX))+
   geom_bar(position = "fill")+
   ylab("proportion")
-ggplot(design_overlap, aes(x=factor(Plate_NO), y=Age))+
+ggplot(ip_design_omfo, aes(x=factor(batch), y=age))+
   geom_boxplot()+
   stat_n_text()
-
+  
 ```
-
-Only zygosity shows between-plate differences
-
-### Quantile normalisation
-
-Quantile normalisation (applied to both 'corrected' datasets as pre-processing step in PopPAnTe).
-
-* Main assumption/impact: forces the distribution of signals (over probes/glycans/FACS) to be identical in each sample
-    + Thus removes global differences between samples, i.e. global upregulation will not be detectable
-    
-```{r eval=FALSE}
-
-s <- svd(glycans[-(1:5)])
-
-```
-
-### PCA glycans
 
 
 
@@ -1340,7 +1478,6 @@ p_lin_source_IgX_enrich <- lin_source_IgX_props_df %>%
 p_lin_source_IgX_enrich
 
 ```
-
 
 
 # Correlation structures
@@ -1607,6 +1744,7 @@ boxplot(res_comp$new_res)
 
 ### Cross-Modality
 
+Batch effects of lesser relevance.
 
 # WGCNA
 
@@ -1625,16 +1763,34 @@ Modularity based on similarity, adjacency or TOM? Different choice depending on 
 
 ### Including derived traits
 
-```{r glycans-scale-free-softpower}
+#### Correlation distribution
 
-# View(glycans_scale_free$sft_df)
-glycans_scale_free$p_rsq
-glycans_scale_free$p_k
-
-#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```{r}
+glycans_qn_fam_adj_cor <- WGCNA::cor(glycans_qn_fam_adj, 
+                                     method = "pearson",
+                                     use="pairwise.complete.obs")
+glycans_raw_cor <- WGCNA::cor(glycans_raw_omfo, 
+                              method = "pearson",
+                              use="pairwise.complete.obs")
+hist(unlist(glycans_qn_fam_adj_cor))
+hist(unlist(glycans_raw_cor))
+hist(abs(unlist(glycans_qn_fam_adj_cor))^2)
 ```
 
 
+
+#### Power parameter
+
+```{r glycans-scale-free-softpower}
+
+cowplot::plot_grid(
+glycans_scale_free$p_rsq,
+glycans_scale_free$p_k
+)
+#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```
+
+#### Network module parameters
 
 
 ```{r glycans-parameter-exploration, include=FALSE}
@@ -1655,7 +1811,8 @@ glycan_module_stats$merge_pars_used %>%
       mutate(parameter=rownames(.x[[1]])) %>% 
       dplyr::select(parameter, everything())
   )
-glycan_module_stats$mod_modularities
+# glycan_module_stats$mod_modularities
+
 
 # calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
 # remark: sometimes adj-based module definition might be better 
@@ -1664,12 +1821,19 @@ glycan_module_stats$mod_modularities
 
 ```
 
-Networks:
+#### Networks
+
 ```{r glycans-parameter-exploration-plots}
 for (i in seq_along(glycan_module_stats$plots)){
   draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
 }
 
+```
+
+Modularity:
+
+```{r}
+glycan_module_stats$modularity_overview
 ```
 
 
@@ -1690,26 +1854,33 @@ In IgG:
 
 ### Excluding derived traits
 
+#### power parameter
 
 ```{r glycans-scale-free-softpower-noderiv}
 
 # View(glycans_scale_free$sft_df)
-
-glycans_scale_free_noderiv$p_rsq
-glycans_scale_free_noderiv$p_k
-
+cowplot::plot_grid(
+  glycans_scale_free_noderiv$p_rsq,
+  glycans_scale_free_noderiv$p_k
+)
 #low rsq with power distribution (scale free topology): because not independent entities but related measurements?
 ```
 
+#### Network module parameters
 
 ```{r glycans-parameter-exploration-noderiv, include=FALSE}
 
 
 #scale module-wise modularities?
-glycan_module_stats$plots[[6]]
-glycan_module_stats$merge_pars_used
-glycan_module_stats$mod_modularities
-
+# glycan_module_stats$plots[[6]]
+glycan_module_stats_noderiv$merge_pars_used%>% 
+    map_depth(2,as_tibble) %>%
+  map(
+    ~bind_cols(.x) %>% 
+      setnames(paste0("cut", 1:length(.x))) %>% 
+      mutate(parameter=rownames(.x[[1]])) %>% 
+      dplyr::select(parameter, everything())
+  )
 # calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
 # remark: sometimes adj-based module definition might be better 
 #TODO: retrieve ref for remark
@@ -1717,12 +1888,18 @@ glycan_module_stats$mod_modularities
 
 ```
 
-Networks:
+#### Networks
 
 ```{r glycans-parameter-exploration-noderiv-plots}
-for (i in seq_along(glycan_module_stats$plots)){
-  draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
+for (i in seq_along(glycan_module_stats_noderiv$plots)){
+  draw(glycan_module_stats_noderiv$plots[[i]], column_title = glue("Network {i}"))
 }
+```
+
+Modularity:
+
+```{r}
+glycan_module_stats_noderiv$modularity_overview 
 ```
 
 
@@ -1790,7 +1967,7 @@ n_ips <- ncol(ips)-2
 mem_needed(n_good_ips)  #33 GB
 mem_needed(n_ips)  #180 GB
 
-max_block_size(64)
+max_block_size(32)
 
 ```
 
