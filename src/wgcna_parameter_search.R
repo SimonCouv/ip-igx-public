@@ -81,16 +81,17 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
                                        col=map(as_tibble(modality_df), ~define_colors(.x)),
                                        gp = gpar(col = "white", lwd = 0.5))
       
-      core_hm <- ComplexHeatmap::Heatmap(matrix=cormat,
+      core_hm_modality <- ComplexHeatmap::Heatmap(matrix=cormat,
                                          name="spearman correlation",
                                          col= corcol,
                                          cluster_rows = dend_TOM,
                                          cluster_columns = rev(dend_TOM),
                                          row_names_gp = gpar(fontsize = 5),
                                          column_dend_side = "top",
-                                         show_column_names = FALSE)
+                                         show_column_names = FALSE,
+                                         right_annotation = modality_hm)
       # browser()
-      hm_list <- module_hm + core_hm + modality_hm
+      hm_list <- module_hm + core_hm_modality
       message("generating module heatmap")
       # plot_l[[i]] <- draw(hm_list)
       plot_l[[i]] <- hm_list
