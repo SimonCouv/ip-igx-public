@@ -1,16 +1,21 @@
 hash,type,name
-c8b8bc05a5ddd949,import,calc_modularity
+6362b5a86311426f,import,calc_corr_modularity
+ba0dcb10a5587aee,import,calc_modularity
+29d82a6c1f84a226,import,call_dt
+bfa1dc06e582a632,import,call_future
 5d3d9259f7d950dc,import,clean_rmd_for_render
 b53f44193e16a0fe,import,cluster_pars_dir
+8f2525333389775d,import,compare_input_imputed
 bf7b1eeee38914d0,import,define_colors
 944761892358e3b5,import,define_modules
 7933e973d5d7d711,target,derived_glycan_pos
 623cfea5b5846c62,target,derived_glycans
+b5e17c52229e84f9,target,dummy
 7261752cbc3e21a2,import,figdir
 e146a538b281ba42,import,get_fdr_nfeat_associated_univar
 9abca51b221ee646,import,get_lin_source_props
 b3c9b71b06e2fa4f,import,get_lin_source_props_byIgX
-d6814ec0a532c2a6,import,get_mod_modularities
+511d39428eddbf98,import,get_mod_modularities
 6f7cb5edc72cfaa7,import,ggplot_qual_colors
 cd2906fa558e8ea4,target,glycan_cor
 4849f3417fd9ea16,target,glycan_cross_iter_pars
@@ -18,63 +23,93 @@ cd2906fa558e8ea4,target,glycan_cor
 c0e07001138acc1f,target,glycan_imp
 c85d88fc56f4e042,target,glycan_marginal_pdf
 6cae3fdf36ebed06,target,glycan_modality
-32e478dae35961f5,target,glycan_module_stats
-09f9c819daca2dba,target,glycan_module_stats_noderiv
+7235c5b2ff26933f,target,glycan_modularity_overview
+1b07ea945e193e7b,target,glycan_modularity_overview_noderiv
+a1abcab956828d3a,target,glycan_module_stats
+597442ec367cf980,target,glycan_module_stats_noderiv
 a97f8a952ba10a53,target,glycan_ncomp
-eb3c4be0b150942f,target,glycan_network_pars
+1a3c1b3d2cd08598,target,glycan_network_pars
 69150fa28e785e14,target,glycan_qn_imp
 338a780a9e729e07,target,glycan_qn_ncomp
 0a63134f7691b90b,target,glycan_raw_imp
 8eadd1bfccb7d847,target,glycan_raw_ncomp
 c85d88fc56f4e042,target,glycan_residuals_pdf
 46215f1e3dec1732,target,glycans
-629cbf15809e5cac,target,glycans_fam_adj
-d8a30eaca93a0cdc,import,glycans_lmer_adjust
+4eb95bf6be1900e5,target,glycans_fam_adj
+3ea8d2dc9b9879ac,import,glycans_famadj_imp
+3ea8d2dc9b9879ac,import,glycans_famadj_ncomp
+7d0bbc8a58ff4bc7,target,glycans_gPCA
+3a82866b099dd7a8,target,glycans_gPCA_meanimp
+3a28efb2f950fd02,target,glycans_gPCA_riPCAimp
+bc090af4ecc4ffa5,target,glycans_imp
+a90fff3e60d7e822,import,glycans_lmer_adjust
+52736769a5c90588,target,glycans_mean_imp
+6dce091435179444,target,glycans_meanimp_pca
 3ea8d2dc9b9879ac,import,glycans_mf
+befa83e28f1e008a,target,glycans_ncomp
 ccea4d52c7899b10,target,glycans_o
 9d1537ce981cd3f6,target,glycans_omf
 9e087949df329431,target,glycans_omfo
+3ea8d2dc9b9879ac,import,glycans_pca
+422263f25efa374c,target,glycans_qn_fam_adj
+3ea8d2dc9b9879ac,import,glycans_qn_imp
+3ea8d2dc9b9879ac,import,glycans_qn_ncomp
 7146707f91dbebd7,target,glycans_raw
+3ea8d2dc9b9879ac,import,glycans_raw_imp
 3ea8d2dc9b9879ac,import,glycans_raw_mf
+3ea8d2dc9b9879ac,import,glycans_raw_ncomp
 84c7fc8124833440,target,glycans_raw_o
 211dcf35bc7a8709,target,glycans_raw_omf
 498cef404d32db31,target,glycans_raw_omfo
-75a8d5c1f2b2bccb,target,glycans_raw_omfo_qn
-c09acb8187537923,target,glycans_scale_free
-72b1cea163192ad1,target,glycans_scale_free_noderiv
+e85a55db7fdb5c4c,target,glycans_raw_omfo_qn
+44648c22a882408f,target,glycans_riPCAimp_pca
+91efc67fff0d2362,target,glycans_scale_free
+2fb098102764c575,target,glycans_scale_free_noderiv
+3ea8d2dc9b9879ac,import,glycans_scaled_imp
+901138d3ff719ff1,target,glycans_scaled_ncomp
+3ea8d2dc9b9879ac,import,glycans_scaled_pca
+555543ec7402107a,target,glycans_scaled_riPCA_imp
 1fc3751d94c08117,import,histogram_n
 90c62598b51a7eb6,target,IgA_anno_names_derived
 da098a56c43ce351,target,IgA_anno_names_raw
 4f70792287e2aa75,target,ip_anno
+fc0dace0ff37933b,target,ip_batch
 373bf43432939e72,target,ip_igx_univar
 b2f19a57db542b12,target,ip_igx_univar_good
 761bc3da080296d5,target,ip_igx_univar_good_anno
 c85d88fc56f4e042,target,ip_marginal_pdf
-1c4a03d1a134b677,target,ip_mean
+10ab9d620733774e,target,ip_mean
 29557b8ff4c3e0b6,target,ip_missing
-aea8a283e93d6262,target,ip_raw_mean
+10807b90bc16da73,target,ip_raw_mean
 05957fdbac6d15b7,target,ip_raw_missing
 21ff23f46f96cae0,target,ips
 aeba81c49f182616,target,ips_o
 6a3eb2e43c66dd66,target,ips_omf
 8fca0ebe85df4d4a,target,ips_omfo
+1efdfd408a692bcd,target,ips_qn_fam_adj
 5d1610ffcfda948f,target,ips_raw
 43097f57d41cd7f6,target,ips_raw_o
 71d461350c3ebec4,target,ips_raw_omf
 e6b0fde0dc1b5de6,target,ips_raw_omfo
+7dab6378aa89fc67,target,ips_raw_omfo_qn
+f3aa626879474c57,target,iris_dt
 057e82ded7a3006b,target,lin_source_IgX_props_df
 3a720afd4278fee5,import,lin_source_props
 bbaf655a3e528c71,target,lin_source_props_df
+fe148d84f90ffb42,import,lmer_adjust
+b72351779ed68102,import,lmer_adjust_list
 9e9fa9923857306e,import,make_glycan_marginal_plots
 be3d5658d4f90ec2,import,make_marginal_plots
 0167a6157f6f391e,import,make_module_heatmap_pdf
 9e5949fb95a730b3,import,make_qq
 8bd9ea93c40c7f71,import,make_top_assoc_scatters
 9e5949fb95a730b3,import,make_univar_qq
-8338cb9de336b7c8,target,modularity_overview
-3e269ed9570a3071,target,modularity_overview_noderiv
+ea0336268f30ffef,target,modularity_overview
+a0463dc76e875b15,target,modularity_overview_noderiv
 ad4710f140bb2f28,target,n_associated_m
 bde3af4fe3fec247,import,ComplexHeatmap::Heatmap
+650b0381685e4cb3,import,FactoMineR::PCA
+33323d0d95bdf8af,import,WGCNA::cor
 42bcd7336d10def9,import,ggplot2::ggsave
 6b565102cd698077,import,circlize::colorRamp2
 cf99599e32d2ef78,import,dynamicTreeCut::cutreeHybrid
@@ -91,6 +126,8 @@ efb8f9a49b3682a3,import,dplyr::right_join
 4a050d9b616a34b5,import,dplyr::summarise_all
 36f9439f5abf9401,import,dplyr::select
 228d59069eeaafde,import,dplyr::ungroup
+82bc3ab235aea749,import,furrr::future_map_int
+4a144f9dfa89414a,import,limma::normalizeQuantiles
 bec9a72d94a5212c,import,purrr::map
 bbade528d74d3e8d,import,purrr::transpose
 3031a3340d4d43a5,import,qqman::qq
@@ -100,32 +137,45 @@ d5b757c52d0db6f9,import,rlang::set_names
 a6366398dfd8fefb,import,tidyr::gather
 60ac5f243f874624,import,tidyr::separate
 b212b59951fe696a,target,network_module_heatmaps
-481b767e7293963a,target,network_module_heatmaps_noderiv
+b212b59951fe696a,target,network_module_heatmaps_noderiv
 c6ecc79f0d07d619,import,optimize_network_pars
 76b01a1f6edfe976,target,overlap_omf_samples
 8471365da7e797ca,target,overlap_omf_samples_raw
 a7211a28260b7865,target,overlap_samples
 a95deb984efb5ef5,target,overlap_samples_raw
-b01b638f7db90982,import,file EDA.Rmd
+291576e8ef627e99,target,p_mean_input_impute_comparison
+8ede1ad59c007866,target,p_riPCA_input_impute_comparison
+3ea8d2dc9b9879ac,import,file /input_data/immuno_poppante_AGE_BATCH.covar
+5e61c0b6c34d2612,import,file EDA.Rmd
 d73d45f62ca54f0c,target,file EDA_report.html
+3f900a4f81c33302,import,file WGCNA_parameters/glycan_pars_qn_famadj.tsv
 3ea8d2dc9b9879ac,target,file WGCNA_pars/glycans/overview.pdf
 3ea8d2dc9b9879ac,target,file WGCNA_pars/glycans/overview_noderiv.pdf
 3ea8d2dc9b9879ac,import,file explore_univariate_igx.Rmd
 32e74bbc1733e8d6,target,file explore_univariate_igx_clean.Rmd
+0147203083e2f7a4,import,file input_data/data_annotations/IgA_explanatory_overview.xlsx
+72b80a5d92169c5e,import,file input_data/data_annotations/TwinDetails_110119.csv
+a9a08b2fe282044a,import,file input_data/data_annotations/all_immunophenotypes_annotation_av.csv
+1e9bbaa65ae60f9c,import,file input_data/glycans_corrected_20190409.csv
+ae9ff6a0c0397584,import,file input_data/glycans_raw.csv
+34197d2d0123b1e8,import,file input_data/glycans_20190409_immunopheno_corrected_cleanedSimon.tsv
+f9422563040647d9,import,file input_data/immuno_poppante_AGE_BATCH.covar
+658f485de818c032,import,file input_data/immunopheno.raw.csv
+66060f7d51d68c19,import,file input_data/immunopheno.corrected.csv
 3ea8d2dc9b9879ac,target,file modularity_overview_noderiv.csv
 3ea8d2dc9b9879ac,target,file modularity_overview.csv
 97f45ca9fc7bfdfa,target,file qq.png
-654c4e0aa4dbdef9,target,file results/modularity_overview.csv
-c41f647a3eae42bb,target,file results/modularity_overview_noderiv.csv
+aebe4f719a37b153,target,file results/modularity_overview.csv
+931a158c934c19e2,target,file results/modularity_overview_noderiv.csv
 ce33b242e1feb5e4,target,file results/qq.png
-78eebdcf1451120e,target,file results/report.html
+980ea473dd529308,target,file results/report.html
 cb14b7a4a80ce4a0,target,file results/EDA_report.html
 840566541f83675b,target,file results/figures/top_assoc_scatters.pdf
 38c968727e66f30a,target,file results/figures/univar_qqplot.png
-019e6b304221fdcb,target,file results/figures/WGCNA_pars/glycans/overview.pdf
-8c4c721d7c1948e8,target,file results/figures/WGCNA_pars/glycans/overview_noderiv.pdf
+1a59965c47a71b6e,target,file results/figures/WGCNA_pars/glycans/overview.pdf
+a4e245ef8dc34146,target,file results/figures/WGCNA_pars/glycans/overview_noderiv.pdf
 fe879440f6233783,target,file results/figures/glycan_marginal_plots.pdf
-d190fbeac2b6b7f4,target,file results/figures/glycan_res_marginal_plots.pdf
+41841a160bb278c0,target,file results/figures/glycan_res_marginal_plots.pdf
 f66e7f23fceca4d2,target,file results/figures/ips_marginal_plots_top100.pdf
 15cdb816f26d1301,target,file results/figures/ips_marginal_plots.pdf
 ce1accb2ad8df49c,target,file results/figures/raw_glycan_marginal_plots.pdf
@@ -133,6 +183,7 @@ ce1accb2ad8df49c,target,file results/figures/raw_glycan_marginal_plots.pdf
 3ea8d2dc9b9879ac,target,file {figdir}/glycan_marginal_plots.pdf
 3ea8d2dc9b9879ac,target,file {figdir}/top_assoc_scatters.pdf
 3ea8d2dc9b9879ac,import,file {figdir}/univar_qqplot.png
+234fb67826ac2035,target,par_dummy
 973127639b6c1a3c,target,pval_data
 b212b59951fe696a,target,qq
 c85d88fc56f4e042,target,raw_glycan_marginal_pdf
@@ -150,4 +201,6 @@ c7c18939e523d777,target,target_indices
 c85d88fc56f4e042,target,top_assoc_scatter_pdf
 5985ebc3fae4efca,import,tryCatch.W.E
 274cabea31952097,target,twin_fam
-b61edc6b4d922995,import,wgcna_parameter_search
+edd02b516be9cc34,import,wgcna_parameter_search
+6654b94aa612af7e,target,x
+21bcab335cad2bc4,target,y

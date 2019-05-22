@@ -19,9 +19,8 @@ editor_options:
 
 # run chunk to setup script for interactive use
 
-if (interactive()){
-  source("src/imports.R")
-}
+
+# source("src/imports.R")
 
 figdir <- here("results/figures")
 resultdir <- here("results")
@@ -102,80 +101,86 @@ Note 618 (13455158 - 13454540) lines were removed, which is more than the 604 me
 ```{r read-data}
 
 # glycans
-glycans <- readd(glycans)
-glycans_raw <- readd(glycans_raw)
+loadd(glycans)
+loadd(glycans_raw)
 
 # IPs
-ips <- readd(ips)
-ips_raw <- readd(ips_raw)
+loadd(ips)
+loadd(ips_raw)
 
 # overlap
-overlap_samples <- readd(overlap_samples)
-overlap_samples_raw <- readd(overlap_samples_raw)
+loadd(overlap_samples)
+loadd(overlap_samples_raw)
 
-glycans_raw_o <- readd(glycans_raw_o)
-glycans_o <- readd(glycans_o)
+loadd(glycans_raw_o)
+loadd(glycans_o)
 
-ips_o <- readd(ips_o)
-ips_raw_o <- readd(ips_raw_o)
+loadd(ips_o)
+loadd(ips_raw_o)
 
 # IP missingness
-ip_raw_missing <- readd(ip_raw_missing)
-ip_missing <- readd(ip_missing)
+loadd(ip_raw_missing)
+loadd(ip_missing)
 
 # after missingness filter
-glycans_omf <- readd(glycans_omf)
-glycans_raw_omf <- readd(glycans_raw_omf)
+loadd(glycans_omf)
+loadd(glycans_raw_omf)
 
-ips_omf <- readd(ips_omf)
-ips_raw_omf <- readd(ips_raw_omf)
+loadd(ips_omf)
+loadd(ips_raw_omf)
 
 # overlap after missingness filter
-glycans_omfo <- readd(glycans_omfo)
-glycans_raw_omfo <- readd(glycans_raw_omfo)
+loadd(glycans_omfo)
+loadd(glycans_raw_omfo)
 
-ips_omfo <- readd(ips_omfo)
-ips_raw_omfo <- readd(ips_raw_omfo)
+loadd(ips_omfo)
+loadd(ips_raw_omfo)
 
 # IP mean abundances
-ip_raw_mean <- readd(ip_raw_mean)
-ip_mean <- readd(ip_mean)
-
-# QC: batch effects: quantile normalisated glycans
-glycans_raw_omfo_qn <- readd(glycans_raw_omfo_qn)
-# QC: batch effects: riPCA-imputed glycans
-glycans_ncomp <- readd(glycans_ncomp) #list over all datasets
-glycans_imp <- readd(glycans_imp) #list over all datasets
-glycans_pca <- readd(glycans_pca) #list over all datasets
-# QC: batch effects: formal test
-glycans_gPCA <- readd(glycans_gPCA)
+loadd(ip_raw_mean)
+loadd(ip_mean)
 
 # family-adjusted values
-glycans_fam_adj <- readd(glycans_fam_adj)
-glycans_qn_fam_adj <- readd(glycans_qn_fam_adj)
+loadd(glycans_fam_adj)
+loadd(glycans_qn_fam_adj)
+loadd(ips_qn_fam_adj)
+
+# QC: batch effects: quantile normalisated glycans
+loadd(glycans_raw_omfo_qn)
+# QC: batch effects: riPCA-imputed glycans
+loadd(glycans_scaled_ncomp) #list over all datasets
+loadd(glycans_scaled_riPCA_imp) #list over all datasets
+loadd(glycans_riPCAimp_pca) #list over all datasets
+# QC: batch effects: mean-imputed glycans
+loadd(glycans_mean_imp) #list over all datasets
+loadd(glycans_meanimp_pca) #list over all datasets
+# QC: batch effects: formal test
+loadd(glycans_gPCA_riPCAimp)
+loadd(glycans_gPCA_meanimp)
+
 
 # Popante results --------------------------------------------------------------
-ip_igx_univar <- readd(ip_igx_univar)
-ip_igx_univar_good_anno <- readd(ip_igx_univar_good_anno)
+loadd(ip_igx_univar)
+loadd(ip_igx_univar_good_anno)
 
 # enrichment
-running_IgG_perc <-  readd(running_IgG_perc)
-lin_source_props_df <- readd(lin_source_props_df)
-lin_source_IgX_props_df <- readd(lin_source_IgX_props_df)
+loadd(running_IgG_perc)
+loadd(lin_source_props_df)
+loadd(lin_source_IgX_props_df)
 
 # annotations
-ip_anno <- readd(ip_anno)
+loadd(ip_anno)
 ip_anno_dt <- data.table(ip_anno)
-IgA_anno_names_raw <- readd(IgA_anno_names_raw)
-IgA_anno_names_derived <- readd(IgA_anno_names_derived)
-twin_fam <-readd(twin_fam)
-ip_batch <- readd(ip_batch)
+loadd(IgA_anno_names_raw)
+loadd(IgA_anno_names_derived)
+loadd(twin_fam)
+loadd(ip_batch)
 
 # WGCNA --------------------------------------------------------------
-glycans_scale_free <- readd(glycans_scale_free)
-glycan_module_stats <- readd(glycan_module_stats)
-glycans_scale_free_noderiv <- readd(glycans_scale_free_noderiv)
-glycan_module_stats_noderiv <- readd(glycan_module_stats_noderiv)
+loadd(glycans_scale_free)
+loadd(glycan_module_stats)
+loadd(glycans_scale_free_noderiv)
+loadd(glycan_module_stats_noderiv)
 
 ```
 
@@ -183,7 +188,7 @@ glycan_module_stats_noderiv <- readd(glycan_module_stats_noderiv)
 
 ```{r QC-filter}
 
-ip_igx_univar_good <- readd(ip_igx_univar_good)
+loadd(ip_igx_univar_good)
 
 good_ips <- ip_anno$set_name[ip_anno$robust_mario_qc == "Good"] %>% na.omit()
 ips_o_qc <- ips_o %>%
@@ -296,7 +301,7 @@ Histogram of percentage missing features per sample:
 ```{r hist-miss-feat-per-sample}
 par(mfrow=c(1,2))
 hist(rowMeans(is.na(dplyr::select(glycans_o[-(1:5)], -!!glycan_feat_drop$feature))), 25, main = "glycans - corrected", xlab = "% missing")
-hist(rowMeans(is.na(dplyr::select(glycans_raw_o[-(1:5)], -!!glycan_feat_drop$feature))), 25, main = "glycans - corrected", xlab = "% missing")
+hist(rowMeans(is.na(dplyr::select(glycans_raw_o[-(1:5)], -!!glycan_feat_drop$feature))), 25, main = "glycans - raw", xlab = "% missing")
 
 ```
 
@@ -902,8 +907,6 @@ boxplot(ip_mean[, mean_signal])
 
 ```
 
-
-
 #### Marginal distributions
 
 ```{r}
@@ -923,7 +926,7 @@ feature_sumstat_df %>%
   nest(-one_of("type","statistic")) %>% 
   drop_na() %>% 
   mutate(quantiles = map(data, ~quantile(.x$value, na.rm = TRUE)),
-         quantiles2=map(quantiles, ~bind_rows(.x) %>% gather())) %>% 
+         quantiles2=map(quantiles, ~bind_rows(.x) %>% tidyr::gather())) %>% 
   unnest(quantiles2)  %>%
   kable() %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
@@ -935,6 +938,13 @@ sumstat_p <-feature_sumstat_df %>%
   facet_wrap(~type+statistic, scales="free")
 
 sumstat_p
+
+```
+
+
+```{r}
+
+sum(variances==0)
 
 ```
 
@@ -1021,7 +1031,7 @@ mean of lowest values is just mean of v1, mean of second lowest is just mean of 
 
 each sample gets assigned exactly the same values
 
-```{r}
+```{r qn-simulation}
 
 toy_df <- seq(-50,50,by=10) %>% 
   map(~rnorm(200, mean=.x,sd=3)) %>% 
@@ -1042,7 +1052,7 @@ toy_df_batch_scale <- scale(toy_df_batch)
 toy_df_qn <- t(normalize.quantiles(t(toy_df_batch)))  #per quantile, the corresponding feature is identical for each sample -> 
 toy_df_scale_qn <- t(normalize.quantiles(t(toy_df_batch_scale)))
 
-par(mfrow=c(5,2))
+par(mfrow=c(1,2))
 boxplot(toy_df, main="variables [before batch effect]")
 boxplot(t(toy_df), main="samples [before batch effect]")
 
@@ -1058,7 +1068,6 @@ boxplot(toy_df_scale_qn, main="variables [with BE, scaled] QN")
 boxplot(t(toy_df_qn), main="samples [with BE] QN")
 boxplot(t(toy_df_scale_qn), main="samples [with BE, scaled] QN")
 
-par(mfrow=c(4,2))
 corrplot::corrplot(cor(toy_df), method = "color", type = "lower", main="truth", col=blueWhiteRed(100))
 hist(ifelse(1-diag(11),cor(toy_df), NA), main="truth")
 
@@ -1085,14 +1094,15 @@ Goal: compare principal components between batches, for different datasets:
 
 - 'raw' glycan data
 - glycan data corrected for age*sex + (1|batch)
-- quantile normalised glycan data
+- scaled, then quantile normalised glycan data
 - glycan data adjusted via lmer(glycan ~ (1|FID) + Plate_NO + Age)
-- quantile normalized glycan data adjusted via lmer(glycan ~ (1|FID) + Age))
+- scaled, then quantile normalized glycan data adjusted via lmer(glycan ~ (1|FID) + Age))
 
 ```{r}
 
-par(mfrow=c(5,1))
+par(mfrow=c(2,1))
 boxplot(glycans_raw_omfo[,-(1:5)], main="raw")
+boxplot(glycans_scaled_imp$raw$completeObs, main="raw - scaled, imputed")
 boxplot(glycans_omfo[,-(1:5)], main="corrected: glycan ~ age*sex+ (1|plate)")
 boxplot(glycans_raw_omfo_qn[,-(1:5)], main="qn")
 boxplot(glycans_fam_adj, main="famajd: glycan ~ (1|FID) + plate + Age")
@@ -1108,27 +1118,42 @@ mean(is.na(glycans_raw_omfo[,-(1:5)]))
 
 solution: regularised iterative PCA, cf @josseHandlingMissingValues2012; @josseMissMDAPackageHandling2016.
 
+Assess riPCA imputation. Imputation is generally of poor quality, especially for O-linked IgA glycans (HYT...). Consider using different imputation technique.
+
+```{r}
+
+readd(p_riPCA_input_impute_comparison)
+
+```
+
+Confirmation of mean imputation:
+
+```{r}
+
+readd(p_mean_input_impute_comparison)
+
+```
+
+
+Result of PCA on scaled, then PCA-imputed glycans:
+
 ```{r PCA-impute}
 
-# imputed data is on same scale as input to imputation (because scaling is internal in the estimation procedure see source of imputePCA)
-# View(glycans_imp$raw$completeObs [,sort(colnames(glycans_imp$raw$completeObs))])
-# View(glycans_raw_omfo[, sort(names(glycans_raw_omfo)), with=FALSE])
-
 # % variance explained
-map(glycans_pca, "eig") %>% 
+map(glycans_scaled_pca, "eig") %>% 
   map(head, 10)
 
 ```
 
 #### Visual assessment of PCs per plate 
 
-Boxplots PCs per plate.
+Boxplots PCs per plate, with riPCA-imputed data (but see quality of imputation above).
 
-```{r}
+```{r warning=FALSE, out.width='100%'}
 plot_npc <- 5
 # cbind PCs with plate numbers
 pc_plot_data <-  map2(
-    .x = glycans_pca,
+    .x = glycans_riPCAimp_pca,
     .y = list(glycans_raw_omfo,
               glycans_omfo,
               glycans_raw_omfo_qn,
@@ -1146,6 +1171,47 @@ pc_plot_data <-  map2(
                tidyr::gather( PC, value, -one_of(c("Plate_NO", "n_plate", "plate_long")))
                # dplyr::mutate(PC = factor(PC, levels = paste0("Dim.", 1:15)))
              ) %>% 
+  set_names(c("raw", "lmer(glycan ~ \nage*sex+ (1|plate))", "scaled, QN", "lmer(glycan ~ \n(1|FID) + plate + age)", "scaled, QN\n, glycan ~ (1|FID) + Age)")) %>% 
+  bind_rows(.id="dataset")
+  
+# make boxplot
+ggplot(pc_plot_data, aes(x=as.factor(plate_long), y=value, fill=dataset))+
+  geom_boxplot(show.legend = FALSE)+
+  # stat_n_text(y.pos = -30)+
+  facet_grid(dataset~PC, scales="free")+
+  scale_fill_discrete(name=NA)+
+  coord_flip()+
+  xlab("plate")+
+  ylab("PC value")
+
+
+```
+
+With mean-imputed data
+
+```{r warning=FALSE, out.width='100%'}
+plot_npc <- 5
+# cbind PCs with plate numbers
+pc_plot_data <-  map2(
+    .x = glycans_meanimp_pca,
+    .y = list(glycans_raw_omfo,
+              glycans_omfo,
+              glycans_raw_omfo_qn,
+              glycans_raw_omfo,
+              glycans_raw_omfo),
+    .f = function(x,y,...){
+      cbind(y[, 'Plate_NO'], x$ind$coord[,1:plot_npc])
+    },
+  ) %>%
+
+  # gather, clean then combine datasets in single df for plotting
+  purrr::map(~ group_by(.x, Plate_NO) %>% 
+               mutate(n_plate=n(),
+                      plate_long = glue("{Plate_NO} (n={n_plate})")) %>% 
+               tidyr::gather( PC, value, -one_of(c("Plate_NO", "n_plate", "plate_long")))
+               # dplyr::mutate(PC = factor(PC, levels = paste0("Dim.", 1:15)))
+             ) %>% 
+  set_names(c("raw", "lmer(glycan ~ \nage*sex+ (1|plate))", "scaled, QN", "lmer(glycan ~ \n(1|FID) + plate + age)", "scaled, QN\n, glycan ~ (1|FID) + Age)")) %>% 
   bind_rows(.id="dataset")
   
 # make boxplot
@@ -1165,7 +1231,7 @@ ggplot(pc_plot_data, aes(x=as.factor(plate_long), y=value, fill=dataset))+
 
 ```{r, eval=FALSE}
 
-data <- glycans_imp$raw$completeObs
+data <- glycans_scaled_imp$raw$completeObs
 sc <- scale(data)
 
 par(mfrow=c(2,1))
@@ -1201,20 +1267,20 @@ all(is.na(glycans_raw[1,-(1:5)]) | is.na(glycans_raw[35,-(1:5)]))
 
 #### Formal test: gPCA
 
-Borderline batch effects in raw data. Fitting a separate model in each plate might lead to loss of information. Therefore used residuals of LMM without plate effect, but on quantile-normalised data, as input to correlation analyses.
+No strong batch effects 
 
 ```{r}
-library(gPCA)
 
-map(glycans_gPCA, "p.val")
+map(glycans_gPCA_meanimp, "p.val")
+map(glycans_gPCA_riPCAimp, "p.val")
 
 ```
 
 For reference, correlation distribution of micro-array data in Reese2013.
 
-```{r}
+```{r eval=FALSE}
 library(gPCA)
-data("caseDat")
+data("caseDat")  # in drake::make error: cannot add bindings to a locked environment
 # data("lowpheDat") # unavailable
 
 casedat_cor <- cor(caseDat$data)
@@ -1319,7 +1385,7 @@ plot(fdr_log_ecdf,
 
 ```{r n-sign-ass-features-FDR}
 
-n_associated_m <- readd(n_associated_m)
+loadd(n_associated_m)
 
 ggplot(ungroup(n_associated_m), aes(x=fdr_threshold, y=prop, colour=omic))+
   geom_line()+
@@ -1752,12 +1818,16 @@ Objective of WGCNA is not necessarily globally optimal partitioning, but rather 
 
 How to deal with "grey" module?
 
-- treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?  <- current approach
-- all grey members as singleton clusters?
+Current approach:
+- treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?
+- Equivalently: treat all grey members as singleton clusters (so that in modularity calculation: delta(C_i,C_j)=0 for every singleton cluster i and every cluster j)
 
+But also included full modularity, treating the grey cluster as a real cluster.
 
-Modularity based on similarity, adjacency or TOM? Different choice depending on whether modules defined based on adj or TOM?
-
+Modularity is calculated for based on three similarity matrices:
+  - correlation (following Gomez2009, with known limitations cf MacMahon2015).
+  - adjacency ~ network parameters
+  - TOM ~ network parameters
 
 ## Glycans
 
@@ -1833,7 +1903,25 @@ for (i in seq_along(glycan_module_stats$plots)){
 Modularity:
 
 ```{r}
-glycan_module_stats$modularity_overview
+glycan_module_stats$modularity_overview %>% 
+  unite(col="nw_cut", network_iter, cut_iter) %>% 
+  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
+  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
+  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
+  geom_line()+
+  coord_flip()
+
+glycan_module_stats$modularity_overview %>% 
+  # unite(col="nw_cut", network_iter, cut_iter) %>% 
+  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
+  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
+            function(x){(x-min(x))/diff(range(x))}) %>% 
+  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
+  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
+  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
+  geom_line()+
+  facet_grid(networktype~softpower+corfnc)+
+  coord_flip()
 ```
 
 
@@ -1902,6 +1990,28 @@ Modularity:
 glycan_module_stats_noderiv$modularity_overview 
 ```
 
+```{r}
+glycan_module_stats_noderiv$modularity_overview %>% 
+  unite(col="nw_cut", network_iter, cut_iter) %>% 
+  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
+  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
+  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
+  geom_line()+
+  coord_flip()
+
+glycan_module_stats_noderiv$modularity_overview %>% 
+  # unite(col="nw_cut", network_iter, cut_iter) %>% 
+  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
+  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
+            function(x){(x-min(x))/diff(range(x))}) %>% 
+  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
+  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
+  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
+  geom_line()+
+  facet_grid(networktype~softpower+corfnc)+
+  coord_flip()
+```
+
 
 Compared to WGCNA including derivered traits:
 
@@ -1945,7 +2055,7 @@ Some derived traits might be driven primarily by a single glycan. Example: ENI_A
 
 -> Possible to assess 'relevance' of derived traits by variance decomposition?
 
-## immunophenotypes
+## Immunophenotypes
 
 ```{r wgcna-ip-memory-calc}
 # https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
@@ -1971,6 +2081,11 @@ max_block_size(32)
 
 ```
 
+# Session info
+
+```{r session_info, include=TRUE, echo=TRUE, results='markup'}
+devtools::session_info()
+```
 
 
 # References
