@@ -14,6 +14,7 @@ plan = drake_plan(
     mutate_all(na_if, y="") %>%   # set all empty string fields to NA 
     set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
     mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage)),
+  ip_anno_dt = as.data.table(ip_anno),
   IgA_anno_names_raw = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names"),
   IgA_anno_names_derived = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
   twin_fam = fread(file_in("input_data/data_annotations/TwinDetails_110119.csv")),
@@ -52,13 +53,19 @@ plan = drake_plan(
       ] %>% 
     .[order(-missing_prop)],
   
-  # IP missingness filter
-  ips_omf = ips_o[, colMeans(is.na(ips_o)) < 0.2, with=FALSE] %>%
-    .[, lapply(., var, na.rm=TRUE)>0, with=FALSE] %>% 
-    .[rowMeans(is.na(.)) < 0.6, ],
-  ips_raw_omf = ips_raw_o[, colMeans(is.na(ips_raw_o)) < 0.2, with=FALSE] %>%
-    .[, lapply(., var, na.rm=TRUE)>0, with=FALSE] %>% 
-    .[rowMeans(is.na(.)) < 0.6, ],
+  # IP: filter for zero-variance, col(IP)-wise missingness, final_qc_max, old_p6, then row(sample)-wise missingness
+  ips_omf = filter_ips(
+    ips=ips_o,
+    ip_anno_dt=ip_anno_dt,
+    row_miss_threshold = 0.6,
+    col_miss_threshold = 0.2
+  ),
+  ips_raw_omf = filter_ips(
+    ips=ips_raw_o,
+    ip_anno_dt=ip_anno_dt,
+    row_miss_threshold = 0.6,
+    col_miss_threshold = 0.2
+  ),
   
   # intersect filtered datasets
   

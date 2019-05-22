@@ -500,6 +500,7 @@ dim(ips_raw_o)
 
 ### Feature annotations
 
+
 #### Overlap feature IDs in data and annotations
 
 1 feature does not have annotations:
@@ -508,12 +509,25 @@ dim(ips_raw_o)
 setdiff(names(ips_raw), ip_anno_dt$set_name)
 ```
 
+#### QC annotations
+
+final_qc_max is more stringent than robust_mario_qc.
+
+Features included by final_qc_max are subset of those included by robust_mario_qc
+
+```{r}
+dim(ip_anno_dt)
+table(ip_anno_dt$final_qc_max)
+table(ip_anno_dt$robust_mario_qc)
+ip_anno_dt[,table(final_qc_max, robust_mario_qc)]
+```
+
 
 #### Structure of dataset (feature hierarchy)
 
 Overview resolved issues:
 
-* 'xxx.new' in set_name column -> all have source=="P6 newB"
+* 'xxx.new' in set_name column -> all have source=="P6 newB" -> corresponds to new gating strategy for B cells (cf Mangino2017, section "Selection of traits and modelling influences", numbers match exactly) -> exclude old P6 features
 * duplicated subset_names? -> when different plates contains same markers at the top of the hierarchy
 
 Overview open issues:
@@ -895,61 +909,48 @@ mean(ip_raw_mean[,mean_signal < 1e-3 | mean_signal >0.99])
 1-49928/78683
 ```
 
-##### IP frequency distribution
 
-```{r ip-freq-distr}
 
-ip_raw_mean[order(-mean_signal)]
-ip_mean[order(-mean_signal)]
+##### Replicate strategy Mangino2017
 
-boxplot(ip_raw_mean[, mean_signal])
-boxplot(ip_mean[, mean_signal])
+cf. Mangino2017, Suppl. fig 3 (SF3)
 
-```
-
-#### Marginal distributions
+Excluding features with source in c("P6", "P6 earlyB") gives exact number of "complete set" in SF3
 
 ```{r}
-variances <- apply(ips_raw_omfo[,-(1:2)],2,var, na.rm=TRUE)
-means <- apply(ips_raw_omfo[,-(1:2)],2,mean, na.rm=TRUE)
-CVs <- sqrt(variances)/abs(means)
-
-feature_sumstat_df <- cbind(means, variances, CVs, feature = names(ips_raw_omfo)[-(1:2)]) %>% 
-  as_tibble() %>%
-  tidyr::gather(statistic, value, -feature) %>% 
-  left_join(ip_anno[c("set_name", "composite_lin_source")], by=c("feature"="set_name")) %>% 
-  mutate(type=ifelse(composite_lin_source=="MFI", "SPEL", "CSF"),
-         value=as.numeric(value))
-
-feature_sumstat_df %>% 
-  mutate(value=as.numeric(value)) %>% 
-  nest(-one_of("type","statistic")) %>% 
-  drop_na() %>% 
-  mutate(quantiles = map(data, ~quantile(.x$value, na.rm = TRUE)),
-         quantiles2=map(quantiles, ~bind_rows(.x) %>% tidyr::gather())) %>% 
-  unnest(quantiles2)  %>%
-  kable() %>%
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
-
-sumstat_p <-feature_sumstat_df %>% 
-  drop_na() %>% 
-  ggplot(aes(x="", y=value))+
-  geom_boxplot()+
-  facet_wrap(~type+statistic, scales="free")
-
-sumstat_p
+ip_anno_dt[,table(source)]
+dim(ip_anno_dt[!(source %in% c("P6", "P6 earlyB")),])
 
 ```
 
+Final_max_qc is closest to #features after exclusion of "out-of-range" and "poor reproducibility" [37999 features, vs 37997 in SF3].
+
+```{r}
+ip_anno_dt[!(source %in% c("P6", "P6 earlyB")),] %>% 
+  .[,table(robust_mario_qc)]
+ip_anno_dt[!(source %in% c("P6", "P6 earlyB")),] %>% 
+  .[,table(final_qc_max)]
+```
+
+Re-implementing the "Out of range criteria", using mean_value column of ip_anno, excludes only 31095, or 1029 fewer features than described in SF3.
 
 ```{r}
 
-sum(variances==0)
+ip_anno_dt[!(source %in% c("P6", "P6 earlyB")),] %>% 
+  .[(source=="MFI" & mean_value < 100) | 
+      (source != "MFI" & (mean_value < 0.1 | mean_value > 99)),] %>% 
+  .[,table(.(SPEL=source=="MFI"))]
 
 ```
 
+No missing values in mean_value column that could explain the difference
 
-see also PDF for subset of IPs
+```{r}
+ip_anno_dt[,sum(is.na(mean_value))]
+```
+
+
+
 
 ## Sample overlap of missingness-filtered datasets
 
