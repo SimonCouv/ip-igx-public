@@ -19,7 +19,7 @@ plan = drake_plan(
   twin_fam = fread(file_in("input_data/data_annotations/TwinDetails_110119.csv")),
   ip_batch = fread(file_in("input_data/immuno_poppante_AGE_BATCH.covar")),
   
-  # pre-process -------------------------------------------
+  # pre-process (omfo) -------------------------------------------
   
   # intersect 
   
@@ -77,20 +77,43 @@ plan = drake_plan(
     ips_raw_omfo[,1:2],
     t(limma::normalizeQuantiles(t(scale(as.matrix(ips_raw_omfo[,-(1:2)])))))
   ) %>% set_names(names(ips_raw_omfo)),
+  
+  # Relatedness adjustment -------------------------------------------
+  
+  # glycans
+  glycans_fam_adj = lmer_adjust(
+    raw = glycans_raw_omfo,
+    factor_cols = c("FID","IID","Plate_NO","Sex"),
+    covar_pos = 1:5,
+    form=feat ~ (1|FID) + Plate_NO + Age
+  ),
+  
+  glycans_qn_fam_adj = lmer_adjust(
+    raw = glycans_raw_omfo_qn,
+    factor_cols = c("FID","IID", "Sex"),
+    covar_pos = 1:5,
+    form=feat ~ (1|FID) + Age # don't adjust for plate, as no longer strong batch effect after QN (see gPCA)
+  ),  
+  
+  glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
+  
+  # test within-target parallelism
+  par_dummy = call_future(),
+  
+  
+  # data exploration -------------------------------------------
   # IP mean per-feature relative counts
   ip_raw_mean = ips_raw_omfo[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
     data.table::transpose(.) %>%
-    .[,.(set_name = colnames(ips_raw_o)[-(1:2)],
+    .[,.(set_name = colnames(ips_raw_omfo)[-(1:2)],
          mean_signal = V1)
       ],
   ip_mean = ips_omfo[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
     data.table::transpose(.) %>%
-    .[,.(set_name = colnames(ips_o)[-(1:2)],
+    .[,.(set_name = colnames(ips_omfo)[-(1:2)],
          mean_signal = V1)
       ],
-  
-  
-  # data exploration -------------------------------------------
+   
   # glycan marginal distributions pdf
   raw_glycan_marginal_pdf = make_marginal_plots(glycans_raw_omf[,-(1:5)], fig_path = file_out("results/figures/raw_glycan_marginal_plots.pdf")),  # important as input to lmer models
   glycan_marginal_pdf = make_marginal_plots(glycans_omf[,-(1:5)], fig_path = file_out("results/figures/glycan_marginal_plots.pdf")),              # important as input to a.o. association scatters
@@ -99,66 +122,133 @@ plan = drake_plan(
   raw_ip_marginal_pdf = make_marginal_plots(ips_raw_omf[,3:100], fig_path = file_out("results/figures/raw_ips_marginal_plots_top100.pdf")),              # important as input to a.o. association scatters
   ip_marginal_pdf = make_marginal_plots(ips_omf[,3:100], fig_path = file_out("results/figures/ips_marginal_plots_top100.pdf")),              # important as input to a.o. association scatters
   
-  # batch effects -------------------------------------------
+  # batch effects - glycans -------------------------------------------
   # batch effects: riPCA-imputed glycans
-  # find optimal number of PCs to retain in the imputation, using CV
-  glycans_ncomp = future_map(.x = list("raw" = glycans_raw_omfo[,-(1:5)],
-                                "corr" = glycans_omfo[,-(1:5)], 
-                                "qn" = glycans_raw_omfo_qn[,-(1:5)],
-                                "famadj" = glycans_fam_adj,
-                                "qn_famadj" = glycans_qn_fam_adj),
-                      .f = estim_ncpPCA,
-                      ncp.max = 15, 
-                      ncp.min = 0, 
-                      scale=TRUE,
-                      verbose=TRUE),
+  # find optimal number of PCs to retain in the imputation, using CV, on scaled data
+  glycans_scaled_ncomp = future_map(.x = list(
+    "raw" = scale(glycans_raw_omfo[,-(1:5)]),
+    "corr" = scale(glycans_omfo[,-(1:5)]), 
+    "qn" = glycans_raw_omfo_qn[,-(1:5)],
+    "famadj" = scale(glycans_fam_adj),
+    "qn_famadj" = glycans_qn_fam_adj),         # scale input
+  .f = estim_ncpPCA,
+  ncp.max = 15, 
+  ncp.min = 0, 
+  scale=FALSE,  #because inputs are already scaled
+  verbose=TRUE),
   
-  # impute using optimal number of PCs
-  glycans_imp = future_map2(
+  # impute using optimal number of PCs, on scaled data
+  glycans_scaled_riPCA_imp = future_map2(
     .x = map(
-      .x = list("raw" = glycans_raw_omfo[,-(1:5)],
-           "corr" = glycans_omfo[,-(1:5)], 
-           "qn" = glycans_raw_omfo_qn[,-(1:5)],
-           "famadj" = glycans_fam_adj,
-           "qn_famadj" = glycans_qn_fam_adj),
-      ~as.data.frame(.x)),
-    .y = map(glycans_ncomp, "ncp"),
+      .x =  list(
+        "raw" = scale(glycans_raw_omfo[,-(1:5)]),
+        "corr" = scale(glycans_omfo[,-(1:5)]), 
+        "qn" = glycans_raw_omfo_qn[,-(1:5)],
+        "famadj" = scale(glycans_fam_adj),
+        "qn_famadj" = glycans_qn_fam_adj),
+      ~as.data.frame(scale(.x))),                    #scale input IF not already scaled
+    .y = map(glycans_scaled_ncomp, "ncp"),
     .f = function(x,y,...){imputePCA(X=x,ncp=y,...)},
-    scale=TRUE,
+    scale=FALSE,  #because inputs are already scaled (required because FactoMineR::PCA does not provide internal scaling)
     method="Regularized"
   ),
   
-  # standard PCA on imputed datasets, with internal scaling
-  glycans_pca = future_map2(
+  # mean impute
+  glycans_mean_imp = map(
+    .x = list(
+      "raw" = glycans_raw_omfo[,-(1:5)],
+      "corr" = glycans_omfo[,-(1:5)], 
+      "qn" = glycans_raw_omfo_qn[,-(1:5)],
+      "famadj" = glycans_fam_adj,
+      "qn_famadj" = glycans_qn_fam_adj),
+    .f = ~map(.x, function(x){x[is.na(x)]<- mean(x, na.rm=TRUE); x}) %>% 
+      as_tibble()
+  ),
+  
+  # compare feature-wise distributions between input and imputed data points
+  p_riPCA_input_impute_comparison = compare_input_imputed(
+    raw_df_l = list(
+      "raw" = scale(glycans_raw_omfo[,-(1:5)]),
+      "corr" = scale(glycans_omfo[,-(1:5)]), 
+      "qn" = glycans_raw_omfo_qn[,-(1:5)],
+      "famadj" = scale(glycans_fam_adj),
+      "qn_famadj" = glycans_qn_fam_adj),
+    imputed_df_l = map(glycans_scaled_riPCA_imp, "completeObs")
+  ),
+  
+  p_mean_input_impute_comparison = compare_input_imputed(
+    raw_df_l = list("raw" = glycans_raw_omfo[,-(1:5)],
+              "corr"= glycans_omfo[,-(1:5)],
+              "qn"= glycans_raw_omfo_qn[,-(1:5)],
+              "famadj"= glycans_fam_adj,
+              "qn_famadj" =  glycans_qn_fam_adj),
+    imputed_df_l = glycans_mean_imp
+  ),
+  
+  # PCA analysis, for PC boxplots per plate
+  # standard PCA on riPCA-imputed datasets, on scaled data
+  glycans_riPCAimp_pca = future_map2(
     .x = map2(
-      .x = glycans_imp,
+      .x = glycans_scaled_riPCA_imp,
       .y = list(glycans_raw_omfo,
-              glycans_omfo,
-              glycans_raw_omfo_qn,
-              glycans_raw_omfo,
-              glycans_raw_omfo),
+                glycans_omfo,
+                glycans_raw_omfo_qn,
+                glycans_raw_omfo,
+                glycans_raw_omfo),
       .f = function(x,y){cbind(y[, 'Plate_NO'], x$completeObs)}
     ),
-    .y = map(glycans_ncomp, "ncp"),
+    .y = map(glycans_scaled_ncomp, "ncp"),
     .f =  function(x,y,...){FactoMineR::PCA(X = x, ncp = y, ...)},
     quali.sup = 1,
     graph = FALSE
   ),
   
+  # standard PCA on mean-imputed datasets, with prior scaling
+  glycans_meanimp_pca= future_map(
+    .x = map2(
+      .x = map(glycans_mean_imp, ~scale(.x)),
+      .y = list(glycans_raw_omfo,
+                glycans_omfo,
+                glycans_raw_omfo_qn,
+                glycans_raw_omfo,
+                glycans_raw_omfo),
+      .f = function(x,y){cbind(y[, 'Plate_NO'], x)}
+    ),
+    .f =  function(x,y,...){FactoMineR::PCA(X = x, ...)},
+    quali.sup = 1,
+    graph = FALSE,
+    ncp=15
+  ),
+  
   # formal test (Reese2013)
-  glycans_gPCA = future_map2(
-    .x = glycans_imp,
+  glycans_gPCA_meanimp = future_map2(
+    .x = map(glycans_mean_imp, ~scale(.x)),  #scale inputs to give same weight
     .y = list(glycans_raw_omfo,
               glycans_omfo,
               glycans_raw_omfo_qn,
               glycans_raw_omfo,
               glycans_raw_omfo),
     .f = function(x,y,...){
-      gPCA.batchdetect(x=x$completeObs, 
-                       batch=y$Plate_NO)
+      gPCA.batchdetect(x=x, batch=y$Plate_NO)
     },
-    center = FALSE,
-    scaleY = TRUE,
+    center = TRUE,  # data is centered [counter-intuitive parameter name, see ?gPCA.batchdetect]
+    scaleY = TRUE,  # adjust for unequal batch sizes
+    nperm=20000,
+    seed=5
+  ),
+  # formal test (Reese2013)
+  glycans_gPCA_riPCAimp = future_map2(
+    .x = glycans_scaled_riPCA_imp,  #already scaled prior to imputation
+    .y = list(glycans_raw_omfo,
+              glycans_omfo,
+              glycans_raw_omfo_qn,
+              glycans_raw_omfo,
+              glycans_raw_omfo),
+    .f = function(x,y,...){
+      gPCA.batchdetect(x=x$completeObs, batch=y$Plate_NO)
+    },
+    center = TRUE,  # data is centered [counter-intuitive parameter name, see ?gPCA.batchdetect]
+    scaleY = TRUE,  # adjust for unequal batch sizes
     nperm=20000,
     seed=5
   ),
@@ -205,11 +295,7 @@ plan = drake_plan(
   lin_source_IgX_props_df = get_lin_source_props_byIgX(target_indices,
                                                        ip_igx_univar_good_anno),
   
-  # Correlation structures  -------------------------------------------
   
-  glycans_fam_adj = glycans_lmer_adjust(glycans_raw_omfo, form=glycan ~ (1|FID) + Plate_NO + Age),
-  glycans_qn_fam_adj = glycans_lmer_adjust(glycans_raw_omfo_qn, form=glycan ~ (1|FID) + Age),  # don't adjust for plate, as no longer strong batch effect after QN (see gPCA)
-  glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
   
   
   # WGCNA  -------------------------------------------
@@ -221,8 +307,8 @@ plan = drake_plan(
   scale_free_iter_pars = expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
                                      corFnc = c('cor', 'bicor'),
                                      stringsAsFactors = FALSE),
-  derived_glycan_pos = str_detect(names(glycans_fam_adj), pattern = "_"),
   
+  derived_glycan_pos = str_detect(names(glycans_fam_adj), pattern = "_"),
   glycans_scale_free = optimize_network_pars(data=glycans_qn_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
   glycans_scale_free_noderiv = optimize_network_pars(data=glycans_qn_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
   
@@ -263,19 +349,24 @@ plan = drake_plan(
                                                             height=10,
                                                             network_pars = glycan_network_pars),
   
-  modularity_overview = write_csv(glycan_module_stats$modularity_overview, path = file_out("results/modularity_overview.csv")),
-  modularity_overview_noderiv = write_csv(glycan_module_stats_noderiv$modularity_overview, path = file_out("results/modularity_overview_noderiv.csv")),
+  glycan_modularity_overview = write_csv(glycan_module_stats$modularity_overview, path = file_out("results/modularity_overview.csv")),
+  glycan_modularity_overview_noderiv = write_csv(glycan_module_stats_noderiv$modularity_overview, path = file_out("results/modularity_overview_noderiv.csv")),
+  
+  # Immunophenotypes
+  # ips_scale_free = optimize_network_pars(data=glycans_qn_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
+  
+  
   
   # generate report -------------------------------------------
   
   # rmd_clean_name = clean_rmd_for_render(rmd = file_in("explore_univariate_igx.Rmd"), out_name = file_out("explore_univariate_igx_clean.Rmd"), "View\\("),
   
-  report = target(
-    command = rmarkdown::render(
-      knitr_in("EDA.Rmd"),
-      output_file = file_out(here::here("results/report.html")),
-      quiet = TRUE
-    ),
-    trigger = trigger(change = digest(file.info(file_in("results/figures/univar_qqplot.png"))))  # problem: seems to interfere with automatic dependency detection in Rmd
-  )
+  # report = target(
+  #   command = rmarkdown::render(
+  #     knitr_in("EDA.Rmd"),
+  #     output_file = file_out(here::here("results/report.html")),
+  #     quiet = TRUE
+  #   ),
+  #   trigger = trigger(change = digest(file.info(file_in("results/figures/univar_qqplot.png"))))  # problem: seems to interfere with automatic dependency detection in Rmd
+  # )
 )
