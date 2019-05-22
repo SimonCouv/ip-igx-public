@@ -53,8 +53,12 @@ plan = drake_plan(
     .[order(-missing_prop)],
   
   # IP missingness filter
-  ips_omf = ips_o[, colMeans(is.na(ips_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
-  ips_raw_omf = ips_raw_o[, colMeans(is.na(ips_raw_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
+  ips_omf = ips_o[, colMeans(is.na(ips_o)) < 0.2, with=FALSE] %>%
+    .[, lapply(., var, na.rm=TRUE)>0, with=FALSE] %>% 
+    .[rowMeans(is.na(.)) < 0.6, ],
+  ips_raw_omf = ips_raw_o[, colMeans(is.na(ips_raw_o)) < 0.2, with=FALSE] %>%
+    .[, lapply(., var, na.rm=TRUE)>0, with=FALSE] %>% 
+    .[rowMeans(is.na(.)) < 0.6, ],
   
   # intersect filtered datasets
   
