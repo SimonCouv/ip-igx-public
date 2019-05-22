@@ -67,6 +67,16 @@ plan = drake_plan(
   ips_omfo = ips_omf[ips_omf$IID %in% overlap_omf_samples,],
   ips_raw_omfo = ips_raw_omf[ips_raw_omf$IID %in% overlap_omf_samples_raw],
   
+  #  SCALE, then quantile normalize -------------------------------------------
+  glycans_raw_omfo_qn = cbind(
+    glycans_raw_omfo[,1:5],
+    t(normalizeQuantiles(t(scale(as.matrix(glycans_raw_omfo[,-(1:5)])))))
+  ) %>% set_names(names(glycans_raw_omfo)),
+  
+  ips_raw_omfo_qn = cbind(
+    ips_raw_omfo[,1:2],
+    t(limma::normalizeQuantiles(t(scale(as.matrix(ips_raw_omfo[,-(1:2)])))))
+  ) %>% set_names(names(ips_raw_omfo)),
   # IP mean per-feature relative counts
   ip_raw_mean = ips_raw_omfo[, lapply(.SD, mean, na.rm=TRUE), .SDcols = -(FID:IID)] %>%
     data.table::transpose(.) %>%
@@ -78,12 +88,6 @@ plan = drake_plan(
     .[,.(set_name = colnames(ips_o)[-(1:2)],
          mean_signal = V1)
       ],
-  
-  # quantile normalize
-  glycans_raw_omfo_qn = cbind(
-    glycans_raw_omfo[,1:5],
-    normalize.quantiles(scale(as.matrix(glycans_raw_omfo[,-(1:5)])))
-  ) %>% set_names(names(glycans_raw_omfo)),
   
   
   # data exploration -------------------------------------------
