@@ -6,7 +6,7 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
   
   list2env(cross_iteration_pars, envir=environment())
   message("calculating correlation matrix")
-  cormat <- cor(data, method = "spearman", use = "pairwise.complete.obs")
+  cormat <- WGCNA::cor(x=data, method = "spearman", use = "pairwise.complete.obs")
   corcol <- define_colors(as.vector(cormat), breaks = c(-1,0,1), quant_colors = c("blue", "white", "red"))
   
   # browser()
@@ -24,11 +24,11 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
     iter_network_pars <- as.list(network_pars[i,])
     list2env(iter_network_pars, envir=environment())
 
-        adj <- adjacency(datExpr = data,
+    adj <- adjacency(datExpr = data,
                      type=networktype,
                      power = softpower,
                      corFnc = corfnc)
-    diss_adj <- 1 - adj
+    # diss_adj <- 1 - adj
     
     TOM <- TOMsimilarity(adj)
     dissTOM <-1 - TOM
@@ -46,7 +46,8 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
       
     # browser()
       modules <- do.call(define_modules, c(list(feat_hc_TOM=feat_hc_TOM, dissTOM=dissTOM), iter_cut_pars))
-      modules$modularities <- get_mod_modularities(adj,TOM,modules$dendrocolors$module)
+      modules$modularities <- get_mod_modularities(adj=adj,TOM=TOM,data_cor=cormat,
+                                                   modules=modules$dendrocolors$module)
       network_module_data[[j]] <- modules
       
       
@@ -109,19 +110,38 @@ wgcna_parameter_search <- function(data, network_pars, cut_pars, cross_iteration
                                                                         cut_range=rep(1:nrow(cut_pars),nrow(network_pars))))
   
   # make modularity overview
-  modularity_overview <- mod_modularities_l %>%
+  modularity_overview_nogrey <- mod_modularities_l %>%
     map(~map(.x, ~rownames_to_column(.x) %>%
                dplyr::filter(rowname != "grey") %>%
                dplyr::select(-rowname) %>%
-               dplyr::summarise_all(sum)) %>%
+               dplyr::summarise_all(sum) %>%
+               set_names(paste0(names(.), "_no_grey"))) %>% 
           dplyr::bind_rows(.id="cut_iter")) %>%
-    dplyr::bind_rows(.id="network_iter") %>%
-    dplyr::mutate(cut_iter = str_match(cut_iter, pattern = "cut_iter_([:digit:]+)")[,2]) %>%
-    dplyr::arrange(desc(adj_mod_modularities)) %>%
-    dplyr::left_join(rownames_to_column(network_pars), by=c("network_iter" = "rowname")) %>% 
-    dplyr::left_join(rownames_to_column(cut_pars), by=c("cut_iter" = "rowname"))
+    dplyr::bind_rows(.id="network_iter")
+  modularity_overview_inclgrey <- mod_modularities_l %>%
+    map(~map(.x, ~dplyr::summarise_all(.x, sum) %>%
+               set_names(paste0(names(.), "_incl_grey"))) %>% 
+          dplyr::bind_rows(.id="cut_iter")) %>%
+    dplyr::bind_rows(.id="network_iter")
+  
+  modularity_overview <- inner_join(modularity_overview_nogrey, 
+                                    modularity_overview_inclgrey,
+                                    by=c("cut_iter", "network_iter")) %>% 
+    dplyr::mutate(cut_iter = str_match(cut_iter, 
+                                       pattern = "cut_iter_([:digit:]+)")[,2]) %>%
+    dplyr::arrange(desc(adj_mod_modularities_no_grey)) %>%
+    dplyr::left_join(rownames_to_column(network_pars),
+                     by=c("network_iter" = "rowname")) %>% 
+    dplyr::left_join(rownames_to_column(cut_pars), 
+                     by=c("cut_iter" = "rowname"))
   
   
   return(list(merge_pars_used=merge_pars_used_l, color_overview=color_overview, 
               mod_modularities = mod_modularities_l, plots=plot_l, modularity_overview=modularity_overview))    
 }
+
+
+
+
+
+

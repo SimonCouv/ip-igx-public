@@ -1,5 +1,5 @@
 calc_modularity <- function(colors, adj) {
-  
+  # assumes adj is coded with all 1's on the diagonal
   
   # browser()
   # degree of adjacency matrix
@@ -12,7 +12,7 @@ calc_modularity <- function(colors, adj) {
   # for (c in setdiff(colors, "grey")){
   for (c in unique(colors)){
     members <- which(colors==c)
-    adj_degree_intern <- colSums(adj[members,members])-1
+    adj_degree_intern <- colSums(adj[members,members, drop=FALSE])-1
    
     Wc <- sum(adj_degree_intern)/2   # internal edges
     Sc <- sum(adj_degree[members])  # all edges of modules nodes
