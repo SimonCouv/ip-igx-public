@@ -1,0 +1,239 @@
+---
+title: "Immunophenotype CSFs over 100%"
+author: "Simon Couvreur"
+date: "24/05/2019"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
+    collapsed: false
+    code_folding: hide
+    number_sections: true
+    self_contained: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(drake)
+library(tidyverse)
+library(ggplot2)
+library(data.table)
+library(EnvStats)
+library(knitr)
+library(kableExtra)
+```
+
+
+```{r}
+#load data
+
+loadd(ips_raw_omfo)
+loadd(SPEL_omfo)
+loadd(ip_anno_dt)
+ips_raw_omfo_CSF <- ips_raw_omfo[,-(1:2)] %>% 
+  .[, .SD,  .SDcols=setdiff(names(.), SPEL_omfo)]
+```
+
+# Data
+
+Data is :
+
+1. intersected (sample-wise) with glycans
+2. filtered for 
+    a. zero-variance
+    b. feature-wise missingness
+    c. final_qc_max=="OK"
+3. old_p6 features removed (see Mangino2017 for why)
+4. filtered for row(sample)-wise missingness
+5. intersected (sample-wise) with filtered glycans
+
+After this, some cell subset frequencies (CSF) are above 100%. The following 
+analysis is restricted to CSF (not SPEL features).
+
+# The problem
+
+A total of 286 features have at least one CSF > 100%.
+
+```{r}
+over_100 <- ips_raw_omfo_CSF[, lapply(.SD, function(x){sum(x>100, na.rm=TRUE)})]
+table(unlist(over_100)>0)
+```
+
+# Analysis by feature
+
+Overview of the issues ('value' = CSF value, 'feature' = CSF feature):
+
+  - Most features affected (225) are from plate 3
+  
+```{r}
+n_feat <- over_100 %>% 
+  transpose() %>% 
+  transmute(n_over_100 = V1,
+            set_name = names(over_100)) %>%
+  inner_join(ip_anno_dt, by="set_name") %>% 
+  dplyr::filter(n_over_100>0) %>% 
+  count(source)
+
+n_feat%>% 
+  ggplot(aes(x=source, y=n))+
+  geom_bar(stat="identity")+
+  ylab("Number of affected CSF features")+
+  xlab("source of features (i.e plate)")
+
+
+```
+  
+  - As a proportion of features per plate-source, 'P5 NKT' is most affected 
+  (n=23, 12.3% of features)
+  
+```{r}
+over_100 %>% 
+  transpose() %>% 
+  transmute(n_over_100 = V1,
+            set_name = names(over_100)) %>%
+  inner_join(ip_anno_dt, by="set_name") %>% 
+  mutate(has_over_100 = n_over_100>0) %>% 
+  count(source, has_over_100, .drop = FALSE) %>% 
+  group_by(source) %>% 
+  mutate(n_source = sum(n)) %>% 
+  ungroup() %>% 
+  mutate(perc=round(n/n_source*100, digits = 1)) %>% 
+  dplyr::select(source, has_over_100, perc, n, n_source) %>% 
+  dplyr::filter(has_over_100) %>% 
+  ggplot(aes(x=source,y=perc)) +
+  geom_bar(stat="identity")+
+  ylab("Affected CSF features as percentage of total CSF features")+
+  xlab("source of features (i.e plate)")
+  
+```
+
+  - Typically only one value per feature is affected, 
+  but a few features are more strongly affected
+      * These are typically from plates 4 & 5 (P4, P5 gd, P5 NKT)
+
+```{r}
+over_100 %>% 
+  transpose() %>% 
+  .[V1>0,] %>% 
+  summary()
+
+over_100 %>% 
+  melt(measure.vars=1:ncol(.), variable.name="set_name", value.name= "n_over_100") %>% 
+  .[n_over_100>0,] %>% 
+  setkey("set_name") %>% 
+  .[setkey(ip_anno_dt, "set_name"), .(n_over_100, source), nomatch=0] %>% 
+  ggplot(aes(x=source, y=n_over_100))+
+  geom_boxplot()+
+  stat_n_text()+
+  ylab("number of values>100 per affected feature")+
+  xlab("source of features (i.e plate)")
+```
+     
+  - Consistent with two points above, the proportion of _values_ affected is
+  largest for P5 NKT and the gap is even stronger than when expressed as proportion
+  of _features_ affected.
+  
+```{r}
+over_100 %>% 
+  transpose() %>% 
+  transmute(n_over_100 = V1,
+            set_name = names(over_100)) %>%
+  inner_join(ip_anno_dt, by="set_name") %>% 
+  group_by(source) %>% 
+  summarise(n_value_over_100 = sum(n_over_100),
+            n_value = n()*nrow(ips_raw_omfo_CSF),
+            ppm = round(n_value_over_100/n_value*1e6)) %>% 
+  ggplot(aes(x=source,y=ppm)) +
+  geom_bar(stat="identity")+
+  xlab("source of features (i.e plate)")+
+  ylab("proportion (in ppm) of CSF values (over all features) affected")
+    
+```
+
+  - When a value is >100, it is typically just over 100, except for P3
+  
+```{r}
+ips_raw_omfo_CSF %>% 
+  melt(measure.vars=1:ncol(.), variable.name="set_name", value.name= "value") %>% 
+  .[value>100,] %>% 
+  setkey("set_name") %>% 
+  .[setkey(ip_anno_dt, "set_name"), nomatch=0] %>% 
+  ggplot(aes(x=source, y=value))+
+  geom_boxplot()+
+  stat_n_text()+
+  labs(title = "subset: CSFs over 100%")+
+  ylab("CSF 'percent' value")+
+  xlab("source of features (i.e plate)")
+  
+```
+
+# Contribution per sample
+
+Because for P3, there is typically just one value>100% per feature and the
+exceedance is consistently large: check whether only few samples are underlying
+this.
+
+```{r}
+ips_raw_omfo_CSF %>% 
+  cbind(data.table(index=1:nrow(.)), .) %>%
+  melt(id.vars="index", variable.name="set_name", value.name= "value") %>%
+  .[value>100,] %>% 
+  setkey("set_name") %>% 
+  .[setkey(ip_anno_dt, "set_name"), .(index, set_name, value, source), nomatch=0] %>% 
+  group_by(source) %>% 
+  summarise(n_samples = n_distinct(index)) %>% 
+  inner_join(n_feat, by="source") %>% 
+  dplyr::rename("n_feat"="n") %>% 
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+Indeed only a few (15) samples are causing the exceedances in P3. Now look
+at the contribution per sample.
+
+- typically only one plate affected per sample (as might be expected for experimental artefacts)
+- Pareto: few sample-plate combinations cause the largest number of exceedances
+- **all large exceedances are caused by measurements of sample IID:53612 in P3 (see second plot)**
+
+```{r, fig.asp=2}
+ips_raw_omfo[,-1] %>% 
+  .[, .SD,  .SDcols=setdiff(names(.), SPEL_omfo)] %>% 
+  melt(id.vars="IID", variable.name="set_name", value.name= "value") %>%
+  .[value>100,] %>% 
+  setkey("set_name") %>% 
+  .[setkey(ip_anno_dt, "set_name"), .(IID, set_name, value, source), nomatch=0] %>% 
+  ggplot(aes(x=as.factor(IID), fill=source))+
+  geom_bar(position = "stack")+
+  labs(title = "subset: CSFs over 100%")+
+  xlab("IID")+
+  ylab("number of exceedances")+
+  coord_flip()
+```
+
+```{r, fig.asp=2}
+ips_raw_omfo[,-1] %>% 
+  .[, .SD,  .SDcols=setdiff(names(.), SPEL_omfo)] %>% 
+  melt(id.vars="IID", variable.name="set_name", value.name= "value") %>%
+  .[value>100,] %>% 
+  setkey("set_name") %>% 
+  .[setkey(ip_anno_dt, "set_name"), .(IID, set_name, value, source), nomatch=0] %>% 
+  ggplot(aes(x=as.factor(IID),y=value, fill=source, color=source))+
+  geom_boxplot()+
+  labs(title = "subset: CSFs over 100%")+
+  xlab("IID")+
+  ylab("CSF 'percent' value")+
+  coord_flip()+
+  stat_n_text(size=3)
+```
+
+
+# Proposed solution
+
+1. Set all P6 CSFs for sample IID:53612 to NA (because CSFs with lower values might
+still be overestimated, even when they are not >100%)
+2. Cap all other CSFs at 100%.
+
+
