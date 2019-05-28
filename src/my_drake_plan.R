@@ -33,35 +33,41 @@ plan = drake_plan(
   ips_o = ips[ips$IID %in% overlap_samples,],
   ips_raw_o = ips_raw[ips_raw$IID %in% overlap_samples_raw],
   
+  # cap CSF to 100%, and set P3 CSFs for IID 53612 to NA
+  ips_o_capped = cap_ips(ips_o, ip_anno_dt),
+  ips_raw_o_capped = cap_ips(ips_raw_o, ip_anno_dt),
+  
   # glycan missingness filter
   
-  glycans_omf = glycans_o[, colMeans(is.na(glycans_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
-  glycans_raw_omf = glycans_raw_o[, colMeans(is.na(glycans_raw_o)) < 0.2, with=FALSE] %>% .[rowMeans(is.na(.)) < 0.6, ],
+  glycans_omf = glycans_o[, colMeans(is.na(glycans_o)) < 0.2, with=FALSE] %>%
+    .[rowMeans(is.na(.)) < 0.6, ],
+  glycans_raw_omf = glycans_raw_o[, colMeans(is.na(glycans_raw_o)) < 0.2, with=FALSE] %>%
+    .[rowMeans(is.na(.)) < 0.6, ],
   
   # IP missingness
-  ip_missing = ips_o[, lapply(.SD, function(x) mean(is.na(x))), .SDcols=-(FID:IID)] %>%
+  ip_missing = ips_o_capped[, lapply(.SD, function(x) mean(is.na(x))), .SDcols=-(FID:IID)] %>%
     data.table::transpose(.) %>% 
-    .[,.(set_name = names(ips_o)[-(1:2)],
+    .[,.(set_name = names(ips_o_capped)[-(1:2)],
          missing_prop = V1)
       ] %>% 
     .[order(-missing_prop)],
   
-  ip_raw_missing = ips_raw_o[, lapply(.SD, function(x) mean(is.na(x))), .SDcols=-(FID:IID)] %>% 
+  ip_raw_missing = ips_raw_o_capped[, lapply(.SD, function(x) mean(is.na(x))), .SDcols=-(FID:IID)] %>% 
     data.table::transpose(.) %>% 
-    .[,.(set_name = names(ips_raw_o)[-(1:2)],
+    .[,.(set_name = names(ips_raw_o_capped)[-(1:2)],
          missing_prop = V1)
       ] %>% 
     .[order(-missing_prop)],
   
   # IP: filter for zero-variance, col(IP)-wise missingness, final_qc_max, old_p6, then row(sample)-wise missingness
   ips_omf = filter_ips(
-    ips=ips_o,
+    ips=ips_o_capped,
     ip_anno_dt=ip_anno_dt,
     row_miss_threshold = 0.6,
     col_miss_threshold = 0.2
   ),
   ips_raw_omf = filter_ips(
-    ips=ips_raw_o,
+    ips=ips_raw_o_capped,
     ip_anno_dt=ip_anno_dt,
     row_miss_threshold = 0.6,
     col_miss_threshold = 0.2
