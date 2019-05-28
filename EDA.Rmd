@@ -143,10 +143,12 @@ loadd(ip_mean)
 # family-adjusted values
 loadd(glycans_fam_adj)
 loadd(glycans_qn_fam_adj)
-loadd(ips_qn_fam_adj)
+loadd(ips_trans_fam_adj_l)
+loadd(ips_trans_fam_adj)
 
 # QC: batch effects: quantile normalisated glycans
-loadd(glycans_raw_omfo_qn)
+loadd(glycans_raw_omfo_trans)
+loadd(ips_raw_omfo_trans)
 # QC: batch effects: riPCA-imputed glycans
 loadd(glycans_scaled_ncomp) #list over all datasets
 loadd(glycans_scaled_riPCA_imp) #list over all datasets
@@ -190,9 +192,9 @@ loadd(glycan_module_stats_noderiv)
 
 loadd(ip_igx_univar_good)
 
-good_ips <- ip_anno$set_name[ip_anno$robust_mario_qc == "Good"] %>% na.omit()
-ips_o_qc <- ips_o %>%
-  dplyr::select(!!good_ips)
+# good_ips <- ip_anno$set_name[ip_anno$robust_mario_qc == "Good"] %>% na.omit()
+# ips_o_qc <- ips_o %>%
+#   dplyr::select(!!good_ips)
 
 ```
 
@@ -503,11 +505,15 @@ dim(ips_raw_o)
 
 #### Overlap feature IDs in data and annotations
 
-1 feature does not have annotations:
+1 feature does not have annotations, but is not in filtered set:
 
 ```{r}
 setdiff(names(ips_raw), ip_anno_dt$set_name)
+setdiff(names(ips_raw_omfo), ip_anno_dt$set_name)
 ```
+
+This featured is filtered out during preprocessing (implicitly, by selecting 
+columns from ips based on the values of set_name in ip_anno).
 
 #### QC annotations
 
@@ -851,10 +857,210 @@ In missingness-filtered and overlapped dataset: 2.5% missing:
 mean(is.na(ips_raw_omfo))
 ```
 
+#### IP distributions
 
-#### Low frequency IPs
+Make distinction between SPEL and CSF features
+
+```{r}
+make_ip_distribution_overview(ips_raw_omfo[,-(1:2)])
+```
+
+Features with zero variance should be filtered out early, gives problems in QN and lmer.
+
+Distributions are heavily skewed, find transformation that works:
+
+(BUT effect on correlations?)
+
+Importance of zeros
+
+```{r}
+
+zero_prop <- ips_raw_omfo[, lapply(.SD, function(x){mean(x==0, na.rm=TRUE)})] %>% transpose()
+boxplot(zero_prop)
+summary(zero_prop)
+
+```
+
+###### CSFs
+
+arsin(sqrt) transform reduces skew to some extent, but not completely
+
+```{r}
+par(mfcol=c(3,2))
+
+SPEL_omfo <- ip_anno_dt[(set_name %in% names(ips_raw_omfo)) & source == "MFI",set_name]
+CSF_omfo <- ip_anno_dt[(set_name %in% names(ips_raw_omfo)) & source != "MFI",set_name]
+ips_raw_omfo_CSFsample <- ips_raw_omfo[, base::sample(CSF_omfo, 300), with=FALSE]
+
+ips_raw_omfo_CSFsample %>% 
+  boxplot(main="CSF sample raw")
+
+# ips_raw_omfo_CSFsample %>% 
+#   mutate_all(function(x){log(x/100+1)}) %>%
+#   scale(.) %>% 
+#   boxplot(main="CSF sample -> log(x+1) -> scale")
+
+ips_raw_omfo_CSFsample %>% 
+  mutate_all(function(x){log((x/100)/(1-x/100))}) %>%
+  scale(.) %>% 
+  boxplot(main="CSF sample -> logit -> scale")
+
+ips_raw_omfo_CSFsample %>% 
+  mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+  boxplot(main="CSF sample -> arcsin(sqrt)")
+
+ips_raw_omfo_CSFsample %>% 
+  mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+  scale(.) %>%
+  boxplot(main="CSF sample -> arcsin(sqrt) -> scale")
+
+ips_raw_omfo_CSFsample %>% 
+  mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+  scale(.) %>%
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="CSF sample -> arcsin(sqrt) -> scale -> QN")
+
+ips_raw_omfo_CSFsample %>% 
+  scale(.) %>%
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="CSF sample-> scale -> QN")
+
+```
+
+###### SPELs
+
+```{r}
+par(mfcol=c(5,3))
+ips_raw_omfo_SPELsample <- ips_raw_omfo[, base::sample(SPEL_omfo, 300), with=FALSE]
+outlier_fold <- 3
+# remove_outliers_univar(.,outlier_fold) %>% 
+
+ips_raw_omfo_SPELsample %>% 
+  boxplot(main="SPEL sample raw")
+
+
+ips_raw_omfo_SPELsample %>% 
+  scale(.) %>% 
+  boxplot(main="SPEL sample -> scale")
+
+ips_raw_omfo_SPELsample %>% 
+  scale(.) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> scale -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  remove_outliers_univar(.,outlier_fold) %>% 
+  scale(.) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> rmo -> scale -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt)")
+
+ips_raw_omfo_SPELsample %>% 
+  remove_outliers_univar(.,outlier_fold) %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  boxplot(main="SPEL sample -> rmo -> min-max -> arcsin(sqrt)")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt) -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  remove_outliers_univar(.,outlier_fold) %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> rmo -> min-max -> arcsin(sqrt) -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  remove_outliers_univar(.,outlier_fold) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt)-> rmo -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  scale(.) %>% 
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt) -> scale")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  scale(.) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt) -> scale -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  remove_outliers_univar(.,outlier_fold) %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  scale(.) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> rmo-> min-max -> arcsin(sqrt) -> scale -> QN")
+
+ips_raw_omfo_SPELsample %>% 
+  mutate_all(function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}) %>%   # min-max scale
+  mutate_all(function(x){asin(sqrt(x/100))}) %>%   # arcsin(sqrt)
+  remove_outliers_univar(.,outlier_fold) %>% 
+  scale(.) %>% 
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="SPEL sample -> min-max -> arcsin(sqrt) -> rmo-> scale -> QN")
+
+```
+
+###### Preprocessing pipeline also applicable to glycans?
+
+```{r}
+par(mfcol=c(3,2))
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  boxplot(main="glycans raw")
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  scale(.) %>% 
+  boxplot(main="glycans raw -> scale")
+
+glycans_raw_omfo[,-(1:5)] %>%
+  scale(.) %>%
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="glycans -> scale -> QN [current approach]")
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  mutate_all(function(x){log((x/100)/(1-x/100))}) %>%
+  scale(.) %>% 
+  boxplot(main="glycans -> logit -> scale")
+
+# glycans_raw_omfo[,-(1:5)] %>% 
+#   mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+#   boxplot(main="glycans -> arcsin(sqrt)")
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+  scale(.) %>%
+  boxplot(main="glycans -> arcsin(sqrt) -> scale")
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  mutate_all(function(x){asin(sqrt(x/100))}) %>% 
+  scale(.) %>%
+  {t(limma::normalizeQuantiles(t(.)))} %>% 
+  boxplot(main="glycans -> arcsin(sqrt) -> scale-> QN")
+
+```
+
+
+
 
 ##### Replicate strategy Roederer2015
+
+Problem: dataset is probably updated compared to Roederer2015, see Mangino2017
 
 From Roederer2015:
 

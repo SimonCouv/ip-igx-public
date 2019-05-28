@@ -78,15 +78,22 @@ plan = drake_plan(
   ips_omfo = ips_omf[ips_omf$IID %in% overlap_omf_samples,],
   ips_raw_omfo = ips_raw_omf[ips_raw_omf$IID %in% overlap_omf_samples_raw],
   
-  #  SCALE, then quantile normalize -------------------------------------------
-  glycans_raw_omfo_qn = cbind(
+  #  transform features -------------------------------------------
+  #  (min-max) -> arcsin(sqrt) -> scale -> QN
+  
+  glycans_raw_omfo_trans =  cbind(
     glycans_raw_omfo[,1:5],
-    t(normalizeQuantiles(t(scale(as.matrix(glycans_raw_omfo[,-(1:5)])))))
+    transform_features(glycans_raw_omfo[,-(1:5)]/100)
   ) %>% set_names(names(glycans_raw_omfo)),
   
-  ips_raw_omfo_qn = cbind(
+  SPEL_omfo = ip_anno_dt[(set_name %in% names(ips_raw_omfo)) & source == "MFI",
+                         set_name],
+  ips_raw_omfo_mm = ips_raw_omfo[,-(1:2)][    # min_max_scale the SPEL columns only
+    ,(SPEL_omfo) := lapply(.SD, min_max_scale), .SDcols = SPEL_omfo
+    ],
+  ips_raw_omfo_trans = cbind(
     ips_raw_omfo[,1:2],
-    t(limma::normalizeQuantiles(t(scale(as.matrix(ips_raw_omfo[,-(1:2)])))))
+    transform_features(ips_raw_omfo_mm)
   ) %>% set_names(names(ips_raw_omfo)),
   
   # Relatedness adjustment -------------------------------------------
