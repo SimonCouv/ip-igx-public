@@ -15,7 +15,12 @@ lmer_adjust_list <- function(raw, covar_pos, factor_cols, form){
       lmer(formula = form, model_data, 
            control = lmerControl(optimizer = "nlminbwrap"))
     )
-    residuals(tmp$value)
+    list(
+      res=residuals(tmp$value),
+      beta=tmp$value@beta,  # fixed effects
+      theta=tmp$value@theta,  # random effects
+      warns=tmp$warning,
+      mess=tmp$message)
   }
   
   # fits <- warns <- msgs <- list()
@@ -32,30 +37,6 @@ lmer_adjust_list <- function(raw, covar_pos, factor_cols, form){
     covar_pos=covar_pos, 
     form=form
   )
-  
-  # for (feat in  names(raw)[-covar_pos]){
-  #   
-  #   model_data <- cbind(raw[, ..covar_pos],
-  #                       structure(raw[, ..feat], names="feat"))
-  #   
-  #   tmp <- tryCatch.W.E(
-  #     lmer(formula = form, model_data, 
-  #          control = lmerControl(optimizer = "nlminbwrap"))
-  #   )
-  #   fits[[feat]] <- tmp$value
-  #   warns[[feat]] <- tmp$warning
-  #   msgs[[feat]] <- tmp$message
-  #   
-  #   fam_adj_l[[feat]] <- residuals(fits[[feat]])
-  # }
-  # 
-  
-  # # names of residuals correspond to row index of raw (those which are not NA)
-  # head(which(!is.na(raw$ENI1H5N4F0S1)))
-  # all.equal(as.character(which(!is.na(raw$ENI1H5N4F0S1))),
-  #           names(fam_adj_l$ENI1H5N4F0S1))
-  
-  # collect results in tibble
-  
+
   return(fam_adj_l)
 }

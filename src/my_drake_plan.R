@@ -105,24 +105,41 @@ plan = drake_plan(
   # Relatedness adjustment -------------------------------------------
   
   # glycans
-  glycans_fam_adj = lmer_adjust(
-    raw = glycans_raw_omfo,
-    factor_cols = c("FID","IID","Plate_NO","Sex"),
-    covar_pos = 1:5,
-    form=feat ~ (1|FID) + Plate_NO + Age
-  ),
+  # glycans_fam_adj = lmer_adjust(
+  #   raw = glycans_raw_omfo,
+  #   factor_cols = c("FID","IID","Plate_NO","Sex"),
+  #   covar_pos = 1:5,
+  #   form=feat ~ (1|FID) + Plate_NO + Age
+  # ),
   
-  glycans_qn_fam_adj = lmer_adjust(
-    raw = glycans_raw_omfo_qn,
+  glycans_trans_fam_adj = lmer_adjust(
+    raw = glycans_raw_omfo_trans,
     factor_cols = c("FID","IID", "Sex"),
     covar_pos = 1:5,
     form=feat ~ (1|FID) + Age # don't adjust for plate, as no longer strong batch effect after QN (see gPCA)
-  ),  
+  ),
   
-  glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
+  # glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
   
   # test within-target parallelism
   par_dummy = call_future(),
+  
+  # # IPs
+  # ips_fam_adj = lmer_adjust(
+  #   raw = ip_batch[ips_raw_omfo, on=.(FID, IID),nomatch=0],
+  #   factor_cols = c("batch", "FID", "IID"),
+  #   covar_pos = 1:4,
+  #   form=feat ~ (1|FID) + batch + age),
+  
+  ips_trans_fam_adj_l = lmer_adjust_list(
+    raw = ip_batch[ips_raw_omfo_trans, on=.(FID, IID),nomatch=0],
+    factor_cols = c("batch", "FID", "IID"),
+    covar_pos = 1:4,
+    form=feat ~ (1|FID) + age),  # don't adjust for plate, as no longer strong batch effect after QN (see gPCA)
+  
+  ips_trans_fam_adj = fam_adj_collect(
+    fam_adj_l=ips_trans_fam_adj_l,
+    raw=ip_batch[ips_raw_omfo_trans, on=.(FID, IID),nomatch=0]),
   
   
   # data exploration -------------------------------------------
@@ -332,9 +349,9 @@ plan = drake_plan(
                                      corFnc = c('cor', 'bicor'),
                                      stringsAsFactors = FALSE),
   
-  derived_glycan_pos = str_detect(names(glycans_fam_adj), pattern = "_"),
-  glycans_scale_free = optimize_network_pars(data=glycans_qn_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
-  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_qn_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  derived_glycan_pos = str_detect(names(glycans_trans_fam_adj), pattern = "_"),
+  glycans_scale_free = optimize_network_pars(data=glycans_trans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_trans_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
   
   # 2. parameter search ~ modularity
   
@@ -344,15 +361,15 @@ plan = drake_plan(
     dplyr::select(-aim),
   glycan_cut_pars = expand.grid(deep =c(4, 1),
                                 minModuleSize=c(3,5,10,20)),
-  glycan_modality = ifelse(str_detect(names(glycans_fam_adj), pattern = "IgG"),"IgG","IgA"),
+  glycan_modality = ifelse(str_detect(names(glycans_trans_fam_adj), pattern = "IgG"),"IgG","IgA"),
   
-  glycan_module_stats = wgcna_parameter_search(data=glycans_qn_fam_adj,
+  glycan_module_stats = wgcna_parameter_search(data=glycans_trans_fam_adj,
                                                glycan_network_pars, 
                                                glycan_cut_pars,
                                                glycan_cross_iter_pars, 
                                                create_plot = TRUE,
                                                feat_modality=glycan_modality),
-  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_qn_fam_adj[,!derived_glycan_pos],
+  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_trans_fam_adj[,!derived_glycan_pos],
                                                        glycan_network_pars, 
                                                        glycan_cut_pars,
                                                        glycan_cross_iter_pars, 

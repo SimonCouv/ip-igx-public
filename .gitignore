@@ -13,3 +13,4 @@ packrat/lib*/
 *.pdf
 results
 scratch.*
+*.html
