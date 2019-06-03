@@ -1,6 +1,7 @@
 bigcor <- function(x, nblocks = 10, verbose = TRUE, ...)
 {
   library(ff, quietly = TRUE)
+  x <- as.data.frame(x)
   NCOL <- ncol(x)
   
   ## test if ncol(x) %% nblocks gives remainder 0
