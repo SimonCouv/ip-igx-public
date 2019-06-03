@@ -339,7 +339,7 @@ plan = drake_plan(
   
   
   
-  # WGCNA  -------------------------------------------
+  # WGCNA glycans -------------------------------------------
   
   # 1. scale-free topology: power parameter
   

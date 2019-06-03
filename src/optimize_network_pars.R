@@ -1,17 +1,28 @@
-optimize_network_pars <- function(data, common_pars, pars, powers, hline=0.80, plt_title){
+optimize_network_pars <- function(data=NULL, similarity_l=NULL, common_pars, pars, hline=0.80, plt_title){
+  # similarity__l: named list of correlation-like matrices names are in c(bicor, pearson, spearman)
   
-  sft_df <- data.frame()
-  for (i in 1:nrow(pars)){
-    print(i)
-    iter_pars <- c(list(data=data), common_pars, list(corFnc = pars$corFnc[i], networkType= pars$networktype[i]))
-    sft <- do.call(pickSoftThreshold, iter_pars)
-    # browser()
-    sft_df <- sft$fitIndices %>%
-      dplyr::mutate(networktype= pars$networktype[i],
-                    corFnc=pars$corFnc[i]) %>%
-      rbind(sft_df,.)
+  # assertions
+  if (!is.null(data) & !is.null(similarity_l))
+    stop("only one of 'data' and 'similarity_l' should be provided.")
+  if (!is.null(similarity_l)){
+    stopifnot(!is.null(names(similarity_l)))
+    stopifnot(all(names(similarity_l) %in% c("bicor", "spearman", "pearson")))
+    if ("corFnc" %in% names(pars)){
+      warning("corfnc determined based on names of similarity_l.
+              Column corFnc of pars ignored.")
+    }
   }
   
+  # using similarity_l
+  if (!is.null(similarity_l)){
+    sft_df <- make_sft_from_similarity(similarity_l, common_pars)
+  }
+  
+  # using raw data
+  if(!is.null(data))
+    sft_df <- make_sft(data, pars, common_pars)
+  
+  # create plots
   p_rsq <- sft_df %>%
     dplyr::mutate(signed_rsq = -sign(slope)*SFT.R.sq) %>%
     ggplot(aes(x=Power, y= signed_rsq))+
@@ -21,7 +32,6 @@ optimize_network_pars <- function(data, common_pars, pars, powers, hline=0.80, p
     geom_hline(yintercept=hline, color="red", alpha=0.5)+
     labs(title = glue("{plt_title} - rsq"))+
     theme_bw()
-  
   p_k <- sft_df %>%
     ggplot(aes(x=Power, y= mean.k.))+
     geom_text(aes(label=Power))+
