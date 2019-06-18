@@ -1,0 +1,748 @@
+---
+  title: "IP-IgX correlations & WGCNA"
+author: 
+  - name: "Simon Couvreur"
+output: 
+  html_document:
+  toc: true
+toc_float: true
+toc_depth: 5
+collapsed: false
+code_folding: hide
+number_sections: true
+self_contained: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+# Setup
+  
+```{r setup, include=FALSE}
+
+# run chunk to setup script for interactive use
+
+
+# source("src/imports.R")
+
+figdir <- here("results/figures")
+resultdir <- here("results")
+cluster_pars_dir <- here("WGCNA_parameters")
+datadir <- here("data")
+
+knitr::opts_chunk$set(echo = TRUE,    # in combination with code_folding: hide
+                      dev=c("png", "pdf"),
+                      fig.path = here("results/figures/report/"))
+# automatically switch .png to .pdf in knitr::include_graphics, when rendering to PDF
+# https://bookdown.org/yihui/bookdown/figures.html
+options(knitr.graphics.auto_pdf = TRUE) 
+# vennDiagram uses futile.logger https://stackoverflow.com/questions/33393962/r-dont-write-log-file-for-venndiagram
+futile.logger::flog.threshold(futile.logger::ERROR, name = "VennDiagramLogger")
+
+
+```
+
+## Load data
+
+```{r loadd}
+
+
+```
+
+
+# Within-modality correlation structures
+
+## IPs
+
+### Between modules
+
+Large majority show little correlation, but some module pairs are extensively correlated.
+
+```{r}
+
+ip_module_cor <- cor(dplyr::select(ip_select_scores,-grey), method = "spearman")
+ip_module_cor[upper.tri(ip_module_cor)] %>% boxplot(.)
+
+```
+
+
+## Glycans
+
+### Between modules
+
+```{r}
+
+GGally::ggpairs(glycan_select_scores)
+
+```
+
+```{r}
+
+glycan_module_cor <- cor(dplyr::select(glycan_select_scores,-grey), method = "spearman")
+corcol <-define_colors(as.vector(glycan_module_cor), breaks = c(-1,0,1), quant_colors = c("blue", "white", "red"))
+
+cor_signed <- (glycan_module_cor+1)/2
+cor_hc <- fastcluster::hclust(d=as.dist(1-cor_signed))
+      
+anno_hm <- rowAnnotation(
+  site=anno_text(glycan_select_module_anno$site),
+  chain=anno_text(glycan_select_module_anno$chain),
+  anno=anno_text(glycan_select_module_anno$anno),
+  show_annotation_name=rep(TRUE,3)
+  )
+      
+modality_df <- data.frame(feat_modality=glycan_select_module_anno$igx %>% na.omit(),
+                          stringsAsFactors = FALSE)
+modality_hm <- HeatmapAnnotation(df=modality_df,
+                                 which = "row",
+                                 show_legend = TRUE,
+                                 col=map(as_tibble(modality_df), ~define_colors(.x)),
+                                 gp = gpar(col = "white", lwd = 0.5))
+
+hm <- ComplexHeatmap::Heatmap(
+  matrix=glycan_module_cor,
+  name="glycan inter-module pearson",
+  col= corcol,
+  cluster_rows = as.dendrogram(cor_hc),
+  cluster_columns = rev(as.dendrogram(cor_hc)),
+  row_names_gp = gpar(fontsize = 12),
+  column_dend_side = "top",
+  show_column_names = FALSE,
+  right_annotation = modality_hm,
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid.text(sprintf("%.1f", glycan_module_cor[i, j]), x, y, gp = gpar(fontsize = 10))
+  },
+  row_labels = glycan_select_module_anno$module_tag %>% na.omit()
+)
+
+hm+anno_hm
+
+```
+
+
+
+# WGCNA
+
+Objective of WGCNA is not necessarily globally optimal partitioning, but rather detection of meaningful modules. Grey module is allowed to be very heterogeneous. Also, scale-free property is mostly a heuristic to downscale noise via the power transform, rather than based on theoretical arguments from network/graph theory. Ref Peter Langfelder, Bioconductor forum, https://support.bioconductor.org/p/66101/ [24/04/2019].
+
+How to deal with "grey" module?
+  
+  Current approach:
+  - treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?
+  - Equivalently: treat all grey members as singleton clusters (so that in modularity calculation: delta(C_i,C_j)=0 for every singleton cluster i and every cluster j)
+
+But also included full modularity, treating the grey cluster as a real cluster.
+
+Modularity is calculated based on three similarity matrices:
+  - correlation (following Gomez2009, with known limitations cf MacMahon2015).
+- adjacency ~ network parameters
+- TOM ~ network parameters
+
+## Glycans
+
+### Including derived traits
+
+#### Correlation distribution
+
+```{r}
+glycans_qn_fam_adj_cor <- WGCNA::cor(glycans_qn_fam_adj, 
+                                     method = "pearson",
+                                     use="pairwise.complete.obs")
+glycans_raw_cor <- WGCNA::cor(glycans_raw_omfo, 
+                              method = "pearson",
+                              use="pairwise.complete.obs")
+hist(unlist(glycans_qn_fam_adj_cor))
+hist(unlist(glycans_raw_cor))
+hist(abs(unlist(glycans_qn_fam_adj_cor))^2)
+```
+
+
+
+#### Power parameter
+
+```{r glycans-scale-free-softpower}
+
+cowplot::plot_grid(
+  glycans_scale_free$p_rsq,
+  glycans_scale_free$p_k
+)
+#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```
+
+#### Network module parameters
+
+```{r glycans-parameter-exploration, include=FALSE}
+
+
+# object.size(glycan_module_stats) %>% format(units="MB")
+# saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
+# glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
+# View(glycan_module_stats$color_overview)
+
+#scale module-wise modularities?
+# glycan_module_stats$plots[[6]]
+glycan_module_stats$merge_pars_used %>% 
+  map_depth(2,as_tibble) %>%
+  map(
+    ~bind_cols(.x) %>% 
+      setnames(paste0("cut", 1:length(.x))) %>% 
+      mutate(parameter=rownames(.x[[1]])) %>% 
+      dplyr::select(parameter, everything())
+  )
+# glycan_module_stats$mod_modularities
+
+
+# calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
+# remark: sometimes adj-based module definition might be better 
+#TODO: retrieve ref for remark
+
+
+```
+
+#### Networks
+
+```{r glycans-parameter-exploration-plots}
+for (i in seq_along(glycan_module_stats$plots)){
+  draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
+}
+
+```
+
+Modularity:
+  
+```{r}
+glycan_module_stats$modularity_overview %>% 
+  unite(col="nw_cut", network_iter, cut_iter) %>% 
+  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
+  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
+  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
+  geom_line()+
+  coord_flip()
+
+glycan_module_stats$modularity_overview %>% 
+  # unite(col="nw_cut", network_iter, cut_iter) %>% 
+  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
+  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
+            function(x){(x-min(x))/diff(range(x))}) %>% 
+  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
+  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
+  mutate(mod_def = factor(mod_def, levels = c("cor_mod_modularities_no_grey",
+                                              "adj_mod_modularities_no_grey",
+                                              "TOM_mod_modularities_no_grey"))) %>% 
+  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
+  geom_line()+
+  facet_grid(networktype~softpower+corfnc)+
+  coord_flip()
+```
+
+
+In IgA:
+  
+  - In HYT (IgA - Ser89-126): three blocks with strong positive intra-block and negative inter-block correlations:
+  
+  - H>3, high S
+- H>3, low S
+- H < 5
+
+- cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those
+
+In IgG:
+  
+  - IgGI low fucose, low SA cluster
+
+
+### Excluding derived traits
+
+#### power parameter
+
+```{r glycans-scale-free-softpower-noderiv}
+
+# View(glycans_scale_free$sft_df)
+cowplot::plot_grid(
+  glycans_scale_free_noderiv$p_rsq,
+  glycans_scale_free_noderiv$p_k
+)
+#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+```
+
+#### Network module parameters
+
+```{r glycans-parameter-exploration-noderiv, include=FALSE}
+
+
+#scale module-wise modularities?
+# glycan_module_stats$plots[[6]]
+glycan_module_stats_noderiv$merge_pars_used%>% 
+  map_depth(2,as_tibble) %>%
+  map(
+    ~bind_cols(.x) %>% 
+      setnames(paste0("cut", 1:length(.x))) %>% 
+      mutate(parameter=rownames(.x[[1]])) %>% 
+      dplyr::select(parameter, everything())
+  )
+# calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
+# remark: sometimes adj-based module definition might be better 
+#TODO: retrieve ref for remark
+
+
+```
+
+
+#### Networks
+
+```{r glycans-parameter-exploration-noderiv-plots}
+for (i in seq_along(glycan_module_stats_noderiv$plots)){
+  draw(glycan_module_stats_noderiv$plots[[i]], column_title = glue("Network {i}"))
+}
+```
+
+#### Optimal cut
+Criteria per cut:
+  Distributions (per cut, per module) of modularity and varExplained do not track.
+
+```{r}
+mod_varExpl_plots <- modularity_varExpl_plots(glycan_modules_df_noderiv, varExpl_trh = 0.5)
+mod_varExpl_plots$p_mod_sum_varexpl_constraint
+
+```
+
+
+##### Cut selection
+
+View corrsponding heatmap
+
+```{r}
+
+p=glycan_modules_df_noderiv %>% 
+  dplyr::filter(
+    corfnc=="bicor",
+    networktype=="signed_hybrid",
+    powers==6,
+  ) %>% 
+  dplyr::select(plots) %>% 
+  unlist()
+p
+
+# # feature cluster labels
+glycan_modules_df_noderiv %>%
+  unnest(cut_stats) %>%
+  dplyr::filter(
+    corfnc=="bicor",
+    networktype=="signed_hybrid",
+    powers==6,
+    cut==3
+  ) %>%
+  unnest(feature_stats) %>%
+  group_by(colors) %>% 
+  mutate(n=n()) %>% 
+  View()
+
+```
+
+
+#### old
+
+Broken down by network parameters -> same patterns
+
+```{r}
+
+glycan_modules_df_noderiv %>% 
+  unnest(cut_stats) %>% 
+  unnest(module_stats) %>% 
+  tidyr::gather(modularity_type, modularity, 
+                matches("mod_modularities")) %>% 
+  ggplot(data=., mapping=aes(x=modularity,y=varExplained))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(powers~modularity_type)
+
+glycan_modules_df_noderiv %>% 
+  unnest(cut_stats) %>% 
+  unnest(module_stats) %>% 
+  tidyr::gather(modularity_type, modularity, 
+                matches("mod_modularities")) %>% 
+  ggplot(data=., mapping=aes(x=modularity,y=varExplained))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(corfnc~modularity_type)
+
+glycan_modules_df_noderiv %>% 
+  unnest(cut_stats) %>% 
+  unnest(module_stats) %>% 
+  tidyr::gather(modularity_type, modularity, 
+                matches("mod_modularities")) %>% 
+  ggplot(data=., mapping=aes(x=modularity,y=varExplained))+
+  geom_point()+
+  geom_smooth()+
+  facet_grid(networktype~modularity_type)
+
+```
+
+
+```{r}
+glycan_module_stats_noderiv$modularity_overview %>% 
+  unite(col="nw_cut", network_iter, cut_iter) %>% 
+  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
+  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
+  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
+  geom_line()+
+  coord_flip()
+
+glycan_module_stats_noderiv$modularity_overview %>% 
+  # unite(col="nw_cut", network_iter, cut_iter) %>% 
+  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
+  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
+            function(x){(x-min(x))/diff(range(x))}) %>% 
+  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
+  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
+  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
+  geom_line()+
+  facet_grid(networktype~softpower+corfnc)+
+  coord_flip()
+```
+
+
+Compared to WGCNA including derivered traits:
+  
+  Optimal set parameter set is the same (network 2, iteration 3), with slightly higher maximal modularity in the network excluding derived traits.
+
+In IgA:
+  
+  * In HYT (IgA - Ser89-126): *recovered* three blocks with strong positive intra-block and negative inter-block correlations:
+  
+  + H>3, high S
++ H>3, low S
++ H < 5
+
+* cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those sites: *not retrieved*
+  
+  In IgG:
+  
+  * IgGI low fucose, low SA cluster *is recovered*
+  
+  ### General remarks
+  
+  Negative correlations can carry important information, especially when the glycans are separated by addition/removal of a single sugar moiety.
+
+To assure this
+
+1) Structure of the glycan would need to be known
+2) Biological evidence of the reaction, e.g. compiled in database such as KEGG?
+  
+  But: sialic acid typically terminal -> excellent candidate
+
+Examples: 
+  ENI1H5N4F0S1 and ENI1H5N4F0S2 are strongly negatively correlated.
+LAGY1H5N4F0S2 and LAGY1H5N4F0S1 are strongly positively correlated.
+
+Could relate to:
+  
+  * regulation of reaction: constitutive versus induced?
+  * opposite associations with IPs?
+  
+  Some derived traits might be driven primarily by a single glycan. Example: ENI_A2S and ENI1H5N4F0S2
+
+-> Possible to assess 'relevance' of derived traits by variance decomposition?
+  
+## Immunophenotypes
+  
+```{r wgcna-ip-memory-calc}
+# https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
+
+mem_needed <- function(n_feat){
+  bytes <-n_feat^2*8*3
+  gigabytes <- bytes/2^(10*3)
+  gigabytes
+}
+
+max_block_size <- function(GB_RAM){
+  bytes <- GB_RAM*2^(10*3)
+  n_feat <- sqrt(bytes/24)
+  n_feat
+}
+
+n_ips <- ncol(ips_trans_fam_adj)
+n_ips
+mem_needed(n_ips)  #32 GB
+
+max_block_size(32)
+
+```
+
+
+### Optimal cut
+
+Cuts with deep==4 (i.e. uneven cut indices) perform consistently worse on Gomez modularity.
+
+Ranking is very similar (and identical top 3) when either varExplained-thesholding of varExplained-weighting is used.
+
+```{r}
+mod_varExpl_plots <- modularity_varExpl_plots(ip_modules_df, varExpl_trh = 0.5)
+mod_varExpl_plots$p_mod_sum_varexpl_constraint
+mod_varExpl_plots$p_mod_sum_varexpl_weighted
+
+```
+
+
+### Cut selection
+
+Explore selected cut
+
+```{r}
+
+ip_cut <- ip_modules_df %>% 
+  unnest(cut_stats) %>% 
+  dplyr::filter(
+    corfnc=="spear",
+    networktype=="signed_hybrid",
+    powers==5,
+    cut==8
+  )
+
+# feature labels
+# ip_cut %>% 
+#   unnest(feature_stats) %>% 
+#   View()
+
+```
+
+Module size distribution (excluding grey cluster).
+
+```{r}
+ip_cut%>% 
+  unnest(module_stats) %>% 
+  dplyr::filter(colors!="grey") %>% 
+  .$n %>% 
+  boxplot()
+
+```
+
+
+#### Explore annotations
+
+Modules are highly homogenous w.r.t. source
+
+```{r}
+
+plot(ecdf(ip_select_module_anno$max_prop))
+  
+```
+
+number and size of modules per source
+
+```{r}
+
+ip_select_module_anno %>%
+  ggplot(aes(x=label, y=module_size))+
+  geom_boxplot(varwidth = TRUE)+
+  coord_flip()
+
+```
+
+number of modules per (major) source
+
+```{r}
+
+ip_select_module_anno %>% 
+  count(label_major) %>% 
+  ggplot(aes(x=reorder(label_major,n), y=n))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+
+```
+
+compare module-source distribution with feature-source distribution. 
+
+(here the source of a module is the most frequent source in the module ('label_major'),
+which is an appropriate approximation because modules are typically highly homogeneous
+wrt source, see above)
+
+```{r}
+
+left_join(
+  count(ip_select_module_anno, label_major) %>% rename("composite_lin_source"="label_major"),
+  dplyr::filter(ip_anno, set_name %in% names(ips_trans_fam_adj)) %>% 
+    dplyr::count(composite_lin_source),
+  by=c("composite_lin_source"),
+  suffix=c("_module", "_feature")
+) %>% 
+  arrange(n_module) %>% 
+  mutate(composite_lin_source=factor(composite_lin_source,composite_lin_source)) %>% 
+  gather(dataset, n, -composite_lin_source) %>% 
+  ggplot(aes(x=reorder(composite_lin_source,n), y=n))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  facet_wrap(~dataset, scales="free_x")
+
+```
+
+
+
+# Cross-Modality correlations
+
+## Glycan modules - IPs
+
+Batch effects of lesser relevance.
+
+### Number of significantly associated features per feature group ~ FDR threshold
+
+
+```{r n-sign-ass-features-FDR}
+
+loadd(igx_mod_ips_n_associated_m)
+
+igx_mod_ips_n_associated_m %>% 
+  ungroup() %>%
+  dplyr::rename("feature_group"="omic") %>% 
+  mutate(
+    feature_group = dplyr::recode(
+      feature_group,
+      IgA="IgA_module",
+      IgG="IgG_module",
+      modules="IgX_module")
+  ) %>% 
+  ggplot(aes(x=fdr_threshold, y=prop, colour=feature_group))+
+  geom_line()+
+  theme_bw()+
+  # facet_zoom(x = fdr_threshold < 0.25)
+  facet_zoom(xlim = c(0,0.2))+
+  xlab("q value")+
+  ylab("proportion of features with association < FDR")+
+  geom_vline(xintercept=0.05, color="grey")
+
+```
+
+
+### IP subgroup enrichment
+
+#### Among FDR < 0.05 (dichotomous)
+
+Overall
+
+```{r}
+
+glycan_modules_cor_ips_anno %>% 
+  # dplyr::mutate(storey_sign = factor(ifelse(p.val_storey<0.05, "ip_sign", "ip_nonsign"))) %>% 
+  group_by(composite_lin_source) %>% 
+  summarise(
+    n_tests_source = n(),
+    n_tests = nrow(glycan_modules_cor_ips_anno),
+    n_sign_ip = sum(p.val_storey<0.05),
+    n_sign_test = sum(glycan_modules_cor_ips_anno$p.val_storey<0.05),
+  ) %>%
+  ungroup %>% 
+  mutate(p_hyper = ifelse(
+    n_sign_ip>0,
+    phyper(q=n_sign_ip, m=n_tests_source,
+                     n=n_tests-n_tests_source, k=n_sign_test,
+                     lower.tail = FALSE),
+    1)
+  ) %>% 
+  View()
+  
+```
+
+By IgX
+
+```{r}
+
+glycan_modules_cor_ips_anno %>% 
+  # dplyr::mutate(storey_sign = factor(ifelse(p.val_storey<0.05, "ip_sign", "ip_nonsign"))) %>% 
+  group_by(composite_lin_source, igx) %>% 
+  summarise(
+    n_tests_source = n(),
+    n_sign_ip = sum(p.val_storey<0.05),
+  ) %>%
+  group_by(igx) %>% 
+  mutate(
+    n_tests = sum(n_tests_source),
+    n_sign_test = sum(n_sign_ip),
+  ) %>% 
+  ungroup() %>% 
+  mutate(p_hyper = ifelse(
+    n_sign_ip>0,
+    phyper(q=n_sign_ip, m=n_tests_source,
+                     n=n_tests-n_tests_source, k=n_sign_test,
+                     lower.tail = FALSE),
+    1)
+  ) %>% 
+  arrange(p_hyper) %>% 
+  View()
+  
+```
+
+
+#### Running (taking association rank into account)
+
+Overall:
+  
+```{r ip-lin_source-enrich_cont}
+
+
+
+p_lin_source_enrich <- igx_mod_ips_lin_source_props_df %>%
+  tidyr::gather(lin_source, prop, -one_of("top","weighting")) %>%
+  ggplot(aes(x=top, y=prop, color=lin_source, group=lin_source))+
+  geom_line()+
+  scale_x_log10()+
+  facet_wrap(weighting~.)
+# ggsave(p_lin_source_enrich, filename = glue("{figdir}/p_lin_source_enrich.png"),
+#        width = 6, height = 6, dpi = 600)
+
+p_lin_source_enrich
+
+```
+
+By IgX:
+  
+```{r lin_source-enrich-by-IgX_cont}
+
+# plot
+p_lin_source_IgX_enrich <-  igx_mod_ips_lin_source_IgX_props_df %>%
+  tidyr::gather(lin_source, prop, -one_of(c("top", "IgX"))) %>%
+  ggplot(aes(x=top, y=prop, color=lin_source, group=lin_source))+
+  geom_line()+
+  scale_x_log10()+
+  facet_grid(IgX~.)
+# ggsave(p_lin_source_IgX_enrich, filename = glue("{figdir}/p_lin_source_IgX_enrich.png"),
+#        width = 6, height = 6, dpi = 600)
+
+p_lin_source_IgX_enrich
+
+```
+
+## Glycan modules - IP modules
+
+```{r}
+
+glycan_modules_cor_ips_modules_anno %>% 
+  View()
+
+```
+
+
+
+# Session info
+
+```{r session_info, include=TRUE, echo=TRUE, results='markup'}
+devtools::session_info()
+```
+
+
+# References
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

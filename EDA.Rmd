@@ -142,7 +142,7 @@ loadd(ip_mean)
 
 # family-adjusted values
 loadd(glycans_fam_adj)
-loadd(glycans_qn_fam_adj)
+loadd(glycans_trans_fam_adj)
 loadd(ips_trans_fam_adj_l)
 loadd(ips_trans_fam_adj)
 
@@ -1500,19 +1500,62 @@ hist(casedat_cor)
 
 #### Experimental design
 
-2 samples have no information on batch.
+2 samples could initially not be linked to ip_batch
 
 ```{r}
 ip_design_omfo <- ips_raw_omfo[,1:2] %>% 
   left_join(twin_fam, by=c("FID"="Family_No", "IID"="STUDY_NO")) %>% 
   left_join(ip_batch, by=c("FID", "IID")) 
 
-# summarise_all(ip_design_omfo, function(x)mean(is.na(x)))
-summarise_all(ip_design_omfo, function(x)sum(is.na(x)))
+```
 
-dplyr::filter(ip_design_omfo, is.na(batch))
+but they can be linked based on IID?
+
+```{r}
+
+ip_batch[ips_raw_omfo, on=.(FID, IID),nomatch=0] %>% dim
+ip_batch[ips_raw_omfo, on=.(IID),nomatch=0] %>% dim
 
 ```
+
+Sample with IID 99611 and 99612 have different FID in ips_raw vs ip_batch!
+
+```{r}
+
+inner_join(
+  ips_raw_omfo[,.(IID,FID)],
+  ip_batch[,.(IID,FID)],
+  by="IID",
+  suffix=c(".raw", ".batchinfo")
+) %>% 
+  dplyr::filter(FID.raw!=FID.batchinfo)
+
+```
+
+FIDs in batchinfo are probably incorrect, since they don't follow the
+naming 'convention' IID = FID + index. If this is the case,
+then, because FID 9910 does exist in ips_raw, there is mixing of families 
+due to the wrong FID in ip_batch:
+
+```{r}
+                            # assuming FIDs in ips_raw are correct:
+sum(ips_raw$FID == 9960)
+sum(ips_raw$FID == 9961)
+sum(ip_batch$FID == 9960)   # union of true 9960 and true 9961
+sum(ip_batch$FID == 9961)   # empty
+
+# assuming FIDs in ips_raw are correct:
+test <- ips_raw_omfo_trans[ip_batch, on=.(IID),nomatch=0]
+sum(test$FID == 9960)
+sum(test$FID == 9961)
+
+test_bad <- ip_batch[ips_raw_omfo_trans, on=.(IID),nomatch=0]
+sum(test_bad$FID == 9960)
+sum(test_bad$FID == 9961)
+```
+
+However, to be save, exclude IID 99611 and 99612 from the analysis.
+
 
 
 ```{r}
@@ -1753,12 +1796,12 @@ p_lin_source_IgX_enrich
 ```
 
 
-# Correlation structures
 
 
-## Family clustering
 
-### Options to deal with family clustering
+# Family clustering
+
+## Options to deal with family clustering
 
 * work with residuals of linear mixed effect model
     - problem MZ&DZ treated the same
@@ -1768,9 +1811,9 @@ p_lin_source_IgX_enrich
 * use PopPAnTe? IF variables in regression are on same scale, correlation coefficient = regression coefficient (https://en.wikipedia.org/wiki/Simple_linear_regression#Fitting_the_regression_line)
     + links to question of quantile-normalisation (see above, batch effects)
 
-### bivariate multi-level model
+## bivariate multi-level model
 
-#### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
+### Literature on estimation of bivariate correlation from clustered/multi-level/hierarchical samples
 
 Problem statement: for each sample two or more variables are observed, but samples are correlated (here, due to being twins).
 
@@ -1806,17 +1849,17 @@ Meinck, S., Rodriguez, M.C., 2013. Considerations for correlation analysis using
 Rosner, B., Glynn, R.J., 2017. Estimation of rank correlation for clustered data. Statistics in Medicine 36, 2163–2186. https://doi.org/10.1002/sim.7257
 Rosner, R., 2016. Marginal Association Measures for Clustered Data.
 
-### correlation of LME residuals
+##correlation of LME residuals
 
-#### LMM assumptions
+###LMM assumptions
 
 
 
-#### Within-modality
+###Within-modality
 
-##### Glycans
+####Glycans
 
-###### V1: plate as mixed effect
+#####V1: plate as mixed effect
 
 Groups are non-nested, in the sense of Gelman2007, p244 ("overlapping categories"). This implies that HLMdiag *cannot* be used.
 
@@ -1865,9 +1908,9 @@ glycans_fam_adj_old <-glycans_fam_adj_l %>%
 ```
 
 
-###### Troubleshoot
+#####Troubleshoot
 
-####### Problem outline
+######Problem outline
 
 Problems:
 
@@ -1900,7 +1943,7 @@ summary(glycans_fit)   # var(plate_NO)=0
 glycans_fit <- lmer(ENI1H5N4F0S1 ~ (1|FID) + Sex*Age, glycans_raw_omfo)  # ok
 
 
-## co-occurrence pattern of singularity messages and convergence warnings
+#co-occurrence pattern of singularity messages and convergence warnings
 
 # var(plate_no) is non-zero for 63% of glycans
 plate_var <- fits %>%
@@ -1929,7 +1972,7 @@ plate_var_overview %>%
 ```
 
 
-####### Try different optimizers (allFit), following ?convergence
+######Try different optimizers (allFit), following ?convergence
 
 IgG4_A2G has only the convergence problem.
 
@@ -1945,7 +1988,7 @@ lapply(allfits[isOK],function(x) x@optinfo$conv$lme4$messages)
 ```
 
 
-###### V2: plate as fixed effect
+#####V2: plate as fixed effect
 
 Number of batch levels is sufficient:
 
@@ -1978,7 +2021,7 @@ fit <- lmer(LAGY_A2B ~ (1|FID) + Sex*Age + Plate_NO, glycans_raw,
 ```
 
 
-###### compare new to old residuals
+#####compare new to old residuals
 
 ```{r glycan-lmer-plate-fixedVSrandom, eval=FALSE}
 
@@ -2002,291 +2045,269 @@ boxplot(res_comp$new_res)
 
 ```
 
-###### Model diagnostics
+#####Model diagnostics
 
 
 
-##### Immunophenotypes
+####Immunophenotypes
 
-```{r quantile-normalisation}
+#####Null results -> SOLVED
 
+All features processed. Difference in dimensions is just FID and IID.
 
+```{r, eval=FALSE}
+dim(ips_raw_omfo)
+length(ips_trans_fam_adj_l)
+head(names(ips_raw_omfo))
+head(names(ips_trans_fam_adj_l))
+```
+
+For some features the result is NULL
+
+```{r, eval=FALSE}
+sum(map_lgl(ips_trans_fam_adj_l, is.null))
+null_feat <- names(ips_trans_fam_adj_l)[(map_lgl(ips_trans_fam_adj_l, is.null))]
+```
+
+All NULL features correspond to columns with NA or NaN (can be mixed) after QN:
+
+```{r, eval=FALSE}
+
+# only NA or NaN
+ips_raw_omfo_qn[,..null_feat] %>% 
+  unlist() %>%  table(., useNA = "always")
+
+# columns can be mixed
+ips_raw_omfo_qn[,..null_feat] %>% 
+  map(~n_distinct(.x)) %>% 
+  unlist() %>% 
+  # head() %>% 
+  table()
 
 ```
 
+Corresponding inputs to QN are columns which contain only NA or 0
 
-### Cross-Modality
+```{r, eval=FALSE}
+ips_raw_omfo[,..null_feat] %>% View()
+  unlist() %>%  table(., useNA = "always")
+```
 
-Batch effects of lesser relevance.
+Conclusion: should filter out zero-variance features. 
 
-# WGCNA
+#####Results
 
-Objective of WGCNA is not necessarily globally optimal partitioning, but rather detection of meaningful modules. Grey module is allowed to be very heterogeneous. Also, scale-free property is mostly a heuristic to downscale noise via the power transform, rather than based on theoretical arguments from network/graph theory. Ref Peter Langfelder, Bioconductor forum, https://support.bioconductor.org/p/66101/ [24/04/2019].
-
-How to deal with "grey" module?
-
-Current approach:
-- treat as other clusters, but ignore module-specific modularity contribution in calculation of global modularity?
-- Equivalently: treat all grey members as singleton clusters (so that in modularity calculation: delta(C_i,C_j)=0 for every singleton cluster i and every cluster j)
-
-But also included full modularity, treating the grey cluster as a real cluster.
-
-Modularity is calculated for based on three similarity matrices:
-  - correlation (following Gomez2009, with known limitations cf MacMahon2015).
-  - adjacency ~ network parameters
-  - TOM ~ network parameters
-
-## Glycans
-
-### Including derived traits
-
-#### Correlation distribution
+Try to mangle into matrix (second, error-generating step of lmer-adjust): -> WORKS
 
 ```{r}
-glycans_qn_fam_adj_cor <- WGCNA::cor(glycans_qn_fam_adj, 
-                                     method = "pearson",
-                                     use="pairwise.complete.obs")
-glycans_raw_cor <- WGCNA::cor(glycans_raw_omfo, 
-                              method = "pearson",
-                              use="pairwise.complete.obs")
-hist(unlist(glycans_qn_fam_adj_cor))
-hist(unlist(glycans_raw_cor))
-hist(abs(unlist(glycans_qn_fam_adj_cor))^2)
+loadd(ip_batch)
+loadd(ips_raw_omfo_qn)
+raw <- ip_batch[ips_raw_omfo_qn, on=.(FID, IID),nomatch=0]
+resid <- ips_trans_fam_adj_l %>%
+  map(~tibble(res=.x$res, index=names(.x$res)) %>%
+        dplyr::right_join(tibble(index=as.character(1:nrow(raw))),by="index") %>%  #make residuals complete (i.e. fill in missing lines)
+        dplyr::select(res))%>% 
+  dplyr::bind_cols() %>%
+  rlang::set_names(names(ips_trans_fam_adj_l))
+
+```
+
+No NAs induced
+
+```{r}
+summary(map_dbl(resid,~mean(is.na(.x))))
+summary(map_dbl(raw,~mean(is.na(.x))))
+```
+
+Distribution
+
+```{r}
+ips_trans_fam_adj_distr <- make_ip_distribution_overview(resid, ip_anno)
+ips_raw_omfo_qn_distr <- make_ip_distribution_overview(ips_raw_omfo_qn[,-(1:2)], ip_anno)
+
+ips_trans_fam_adj_distr$p
+ips_raw_omfo_qn_distr$p
+
+par(mfrow=c(2,1))
+resid[, base::sample(1:ncol(resid), 300)] %>% 
+  boxplot(main="random sample - resid")
+
+ips_raw_omfo_trans[, base::sample(1:ncol(ips_raw_omfo_trans[,-(1:2)]), 300), with=FALSE] %>% 
+  boxplot(main="random sample - inputs")
+
+```
+
+#####Model diagnostics
+
+Residuals: homoscedasticity and linearity.
+
+Linearity and homoscedasticity typically ok, but skew is obvious.
+
+```{r}
+sample_cols <- base::sample(1:ncol(ips_qn_fam_adj), 15)
+
+input_sample <- ip_batch[ips_raw_omfo_trans[, c(1:2,sample_cols), with=FALSE],
+                         on=.(FID, IID),nomatch=0]
+
+input_sample %>% 
+  tidyr::gather(IP, resid, -one_of("IID", "FID", "age", "batch")) %>% 
+  ggplot(aes(x=age, y=resid))+
+  geom_point()+
+  geom_smooth()+
+  facet_wrap(~IP)
+
 ```
 
 
+#####Singular fits
 
-#### Power parameter
+355 features had singular fits. For these models, theta (variance estimate of FID) is zero or very small.
+After introducing the arcsin(sqrt) transform, the number of singular fits is 
+reduced to 136, indicating that the skewness is indeed related to obtaining 
+singular fits. Moreover, the remaining singular fits are all for features
+with strong remaining skew after the transformations.
 
-```{r glycans-scale-free-softpower}
+```{r}
+d <- diagnose(ips_trans_fam_adj_l)
+d$messages %>% table(.)
 
-cowplot::plot_grid(
-glycans_scale_free$p_rsq,
-glycans_scale_free$p_k
+singular_ips <- map(ips_trans_fam_adj_l, "mess") %>% discard(is.null) %>% names(.)
+
+# ips_trans_fam_adj_l[singular_ips]
+factor_cols = c("batch", "FID", "IID")
+covar_pos = 1:4
+form=feat ~ (1|FID) + age
+
+feat <- singular_ips[1]
+
+fits <- map(
+  singular_ips,
+  function(x){
+    model_data <- cbind(raw[, ..covar_pos],
+                    structure(raw[, ..x], names="feat"))
+    lmer(formula = form, model_data, 
+         control = lmerControl(optimizer = "nlminbwrap"))
+  }
 )
-#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+map_dbl(fits, ~.x@theta) %>% boxplot()
+map_dbl(fits, ~.x@theta) %>% summary()
 ```
 
-#### Network module parameters
-
-
-```{r glycans-parameter-exploration, include=FALSE}
-
-
-# object.size(glycan_module_stats) %>% format(units="MB")
-# saveRDS(glycan_module_stats, file = glue("{datadir}/glycan_module_stats.RDS"))
-# glycan_module_stats <- readRDS(glue("{datadir}/glycan_module_stats.RDS"))
-# View(glycan_module_stats$color_overview)
-
-#scale module-wise modularities?
-# glycan_module_stats$plots[[6]]
-glycan_module_stats$merge_pars_used %>% 
-  map_depth(2,as_tibble) %>%
-  map(
-    ~bind_cols(.x) %>% 
-      setnames(paste0("cut", 1:length(.x))) %>% 
-      mutate(parameter=rownames(.x[[1]])) %>% 
-      dplyr::select(parameter, everything())
-  )
-# glycan_module_stats$mod_modularities
-
-
-# calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
-# remark: sometimes adj-based module definition might be better 
-#TODO: retrieve ref for remark
-
-
-```
-
-#### Networks
-
-```{r glycans-parameter-exploration-plots}
-for (i in seq_along(glycan_module_stats$plots)){
-  draw(glycan_module_stats$plots[[i]], column_title = glue("Network {i}"))
-}
-
-```
-
-Modularity:
+The estimated fixed effect (age) is practically identical as would be estimated
+with a linear model without mixed effect FID. Max relative difference is 8e-10.
 
 ```{r}
-glycan_module_stats$modularity_overview %>% 
-  unite(col="nw_cut", network_iter, cut_iter) %>% 
-  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
-  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
-  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
-  geom_line()+
-  coord_flip()
-
-glycan_module_stats$modularity_overview %>% 
-  # unite(col="nw_cut", network_iter, cut_iter) %>% 
-  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
-  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
-            function(x){(x-min(x))/diff(range(x))}) %>% 
-  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
-  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
-  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
-  geom_line()+
-  facet_grid(networktype~softpower+corfnc)+
-  coord_flip()
-```
-
-
-In IgA:
-
-- In HYT (IgA - Ser89-126): three blocks with strong positive intra-block and negative inter-block correlations:
-
-    - H>3, high S
-    - H>3, low S
-    - H < 5
-
-- cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those
-
-In IgG:
-
-- IgGI low fucose, low SA cluster
-
-
-### Excluding derived traits
-
-#### power parameter
-
-```{r glycans-scale-free-softpower-noderiv}
-
-# View(glycans_scale_free$sft_df)
-cowplot::plot_grid(
-  glycans_scale_free_noderiv$p_rsq,
-  glycans_scale_free_noderiv$p_k
+linear_fits <- map(
+  singular_ips,
+  function(x){
+    model_data <- cbind(raw[, ..covar_pos],
+                    structure(raw[, ..x], names="feat"))
+    lm(formula = feat~age, model_data)
+  }
 )
-#low rsq with power distribution (scale free topology): because not independent entities but related measurements?
+lm_age_coeff <- map_dbl(linear_fits, ~.x$coefficients["age"])
+lmer_age_coeff <- map_dbl(fits, ~.x@beta[2])
+max(abs(lm_age_coeff- lmer_age_coeff)/pmin(abs(lm_age_coeff), abs(lmer_age_coeff)))
 ```
 
-#### Network module parameters
 
-```{r glycans-parameter-exploration-noderiv, include=FALSE}
-
-
-#scale module-wise modularities?
-# glycan_module_stats$plots[[6]]
-glycan_module_stats_noderiv$merge_pars_used%>% 
-    map_depth(2,as_tibble) %>%
-  map(
-    ~bind_cols(.x) %>% 
-      setnames(paste0("cut", 1:length(.x))) %>% 
-      mutate(parameter=rownames(.x[[1]])) %>% 
-      dplyr::select(parameter, everything())
-  )
-# calculate total non-grey modularity, based on weights in adj or in TOM, but with module definition always based on TOM
-# remark: sometimes adj-based module definition might be better 
-#TODO: retrieve ref for remark
-
-
-```
-
-#### Networks
-
-```{r glycans-parameter-exploration-noderiv-plots}
-for (i in seq_along(glycan_module_stats_noderiv$plots)){
-  draw(glycan_module_stats_noderiv$plots[[i]], column_title = glue("Network {i}"))
-}
-```
-
-Modularity:
+Residuals and inputs:
 
 ```{r}
-glycan_module_stats_noderiv$modularity_overview 
+
+# make_ip_distribution_overview(ips = resid, ip_anno)
+# make_ip_distribution_overview(ips = dplyr::select(resid,!!singular_ips), ip_anno)
+
+par(mfrow=c(2,2))
+resid[, base::sample(1:ncol(resid), 300)] %>% 
+  boxplot(main="random sample - resid")
+dplyr::select(resid,!!singular_ips) %>% 
+  boxplot(main="singular - resid")
+
+ips_raw_omfo_trans[, base::sample(1:ncol(ips_raw_omfo_trans[,-(1:2)]), 300), with=FALSE] %>% 
+  boxplot(main="random sample - inputs")
+dplyr::select(ips_raw_omfo_trans[,-(1:2)],!!singular_ips) %>% 
+  boxplot(main="singular - inputs")
+
+# boxplot(sapply(1:300, rnorm(400)))
+# boxplot(map_dfc(1:300, ~rnorm(400,0,10)))
+
+
 ```
+
+From comparison of distributions for IPs with and without singular fits:
+
+  - Distributions (even after QN) are generally skewed and overdispersed, with large number of outliers
+  - IPs with singular fits are affected to a much larger extent
+  - As expected, the same trend is observed for the lmer residuals
+
+Inputs: filtered, scaled, quantile-normalised IPs:
 
 ```{r}
-glycan_module_stats_noderiv$modularity_overview %>% 
-  unite(col="nw_cut", network_iter, cut_iter) %>% 
-  dplyr::select(nw_cut:cor_mod_modularities_incl_grey) %>% 
-  tidyr::gather(mod_def, mod_value, -nw_cut) %>% 
-  ggplot(aes(x=mod_def, y=mod_value, color=nw_cut, group=nw_cut))+
-  geom_line()+
-  coord_flip()
 
-glycan_module_stats_noderiv$modularity_overview %>% 
-  # unite(col="nw_cut", network_iter, cut_iter) %>% 
-  # dplyr::select(cor_mod_modularities_incl_grey) %>% 
-  mutate_at(vars(adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey),
-            function(x){(x-min(x))/diff(range(x))}) %>% 
-  tidyr::gather(mod_def, scaled_mod_value, adj_mod_modularities_no_grey:cor_mod_modularities_incl_grey) %>%
-  dplyr::filter(str_detect(mod_def, "no_grey")) %>% 
-  ggplot(aes(x=mod_def, y=scaled_mod_value, color=cut_iter, group=cut_iter))+
-  geom_line()+
-  facet_grid(networktype~softpower+corfnc)+
-  coord_flip()
+# make_ip_distribution_overview(ips = ips_raw_omfo_qn[,-(1:2)], ip_anno)
+# make_ip_distribution_overview(ips = ips_raw_omfo_qn[,..singular_ips], ip_anno)
+
+
+
+
+```
+
+Inputs before transformation:
+
+```{r}
+
+par(mfrow=c(2,1))
+ips_raw_omfo[,..singular_ips] %>%
+  scale(.) %>%
+  boxplot(main="singular fits")
+ips_raw_omfo[, base::sample(1:ncol(ips_raw_omfo[,-(1:2)]), 300), with=FALSE] %>% 
+  scale(.) %>%
+  boxplot(main="random subset of IPs")
+
+```
+
+glycans for comparison
+
+```{r}
+par(mfrow=c(1,1))
+glycans_raw_omfo[,-(1:5)] %>% 
+  scale(.) %>% 
+  boxplot(main="glycans")
 ```
 
 
-Compared to WGCNA including derivered traits:
 
-Optimal set parameter set is the same (network 2, iteration 3), with slightly higher maximal modularity in the network excluding derived traits.
+```{r}
 
-In IgA:
+SPEL_omfo <- ip_anno_dt[(set_name %in% names(ips_raw_omfo)) & source == "MFI",set_name]
+CSF_omfo <- ip_anno_dt[(set_name %in% names(ips_raw_omfo)) & source != "MFI",set_name]
 
-* In HYT (IgA - Ser89-126): *recovered* three blocks with strong positive intra-block and negative inter-block correlations:
-
-    + H>3, high S
-    + H>3, low S
-    + H < 5
-
-* cluster of "Bisection of diantennary structures" for different sites, and some of the raw glycans contributing to the derived trait at those sites: *not retrieved*
-
-In IgG:
-
-* IgGI low fucose, low SA cluster *is recovered*
-
-### General remarks
-
-Negative correlations can carry important information, especially when the glycans are separated by addition/removal of a single sugar moiety.
-
-To assure this
-
-  1) Structure of the glycan would need to be known
-  2) Biological evidence of the reaction, e.g. compiled in database such as KEGG?
-  
-  But: sialic acid typically terminal -> excellent candidate
-
-Examples: 
-ENI1H5N4F0S1 and ENI1H5N4F0S2 are strongly negatively correlated.
-LAGY1H5N4F0S2 and LAGY1H5N4F0S1 are strongly positively correlated.
-
-Could relate to:
-
-* regulation of reaction: constitutive versus induced?
-* opposite associations with IPs?
-
-Some derived traits might be driven primarily by a single glycan. Example: ENI_A2S and ENI1H5N4F0S2
-
--> Possible to assess 'relevance' of derived traits by variance decomposition?
-
-## Immunophenotypes
-
-```{r wgcna-ip-memory-calc}
-# https://peterlangfelder.com/2018/11/25/blockwise-network-analysis-of-large-data/
-
-mem_needed <- function(n_feat){
-  bytes <-n_feat^2*8*3
-  gigabytes <- bytes/2^(10*3)
-  gigabytes
+par(mfrow=c(2,1))
+ips_raw_omfo_sing <- ips_raw_omfo[,..singular_ips]
+for (j in intersect(names(ips_raw_omfo_sing),CSF_omfo)){
+  set(ips_raw_omfo_sing, j=j, value=sqrt(ips_raw_omfo_sing[[j]]+1))
 }
+ips_raw_omfo_sing %>% 
+  scale(.) %>% 
+  boxplot()
 
-max_block_size <- function(GB_RAM){
-  bytes <- GB_RAM*2^(10*3)
-  n_feat <- sqrt(bytes/24)
-  n_feat
+
+ips_raw_omfo_sample <- ips_raw_omfo[, base::sample(1:ncol(ips_raw_omfo[,-(1:2)]), 300), with=FALSE]
+for (j in intersect(names(ips_raw_omfo_sample),CSF_omfo)){
+  set(ips_raw_omfo_sample, j=j, value=log(ips_raw_omfo_sample[[j]]+1))
 }
+ips_raw_omfo_sample %>% 
+  scale(.) %>% 
+  boxplot()
 
-n_good_ips <- length(good_ips)
-n_ips <- ncol(ips)-2
-mem_needed(n_good_ips)  #33 GB
-mem_needed(n_ips)  #180 GB
 
-max_block_size(32)
 
 ```
+
+
+
+
 
 # Session info
 
