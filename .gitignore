@@ -1,4 +1,7 @@
 packrat/
+data/*
+input_data/*
+.Rproj
 .Rproj.user
 *.gz
 *.zip
@@ -12,5 +15,9 @@ packrat/lib*/
 *.xls
 *.pdf
 results
-scratch.*
+*scratch*
 *.html
+
+dummy_report\.Rmd
+
+input_data/data_annotations/\.~lock\.IgA_explanatory_overview\.xlsx#

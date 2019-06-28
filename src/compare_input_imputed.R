@@ -25,7 +25,7 @@ compare_input_imputed <- function(raw_df_l, imputed_df_l){
        .f = f) %>% 
     bind_rows(.id="dataset") %>% 
     ggplot(aes(x=feature, y=value, fill=origin, color=origin))+
-    geom_boxplot(outlier.size=1)+
+    geom_boxplot(outlier.size=1, varwidth = TRUE)+
     coord_flip()+
     theme_bw()+
     theme(axis.text=element_text(size=6))+

@@ -5,7 +5,8 @@ define_modules <- function(feat_hc_TOM, dissTOM, minModuleSize = 20, deep=1){
   # Module identification using dynamic tree cut:
   dynamic_mods_TOM <- dynamicTreeCut::cutreeHybrid(dendro = feat_hc_TOM, distM = dissTOM,
                                               deepSplit = deep, pamRespectsDendro = TRUE,
-                                              minClusterSize = minModuleSize)
+                                              minClusterSize = minModuleSize,
+                                              maxPamDist = 0) # see Langfelder2008, supplement, section 3 'choice of detection paramaters'
   
   
   palette_generator <- colorRampPalette(tol21)

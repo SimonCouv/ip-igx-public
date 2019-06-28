@@ -1,4 +1,4 @@
-get_fdr_nfeat_associated_univar <- function(fdr_thresholds, ip_igx_univar_good){
+get_fdr_nfeat_associated_univar <- function(fdr_thresholds, ip_igx_univar_good, p_adj="pv_adj_global"){
   n_associated <- list()
   for (fdr_threshold in fdr_thresholds){
     n_associated[[as.character(fdr_threshold)]] <- ip_igx_univar_good %>%
@@ -6,7 +6,7 @@ get_fdr_nfeat_associated_univar <- function(fdr_thresholds, ip_igx_univar_good){
       #        total_IgG = unique(response) %>% str_detect(., "IgG") %>% sum(.),
       #        total_IgA = total_IgX - total_IgG,
       #        total_IP = n_distinct(predictor)) %>%
-      dplyr::filter(pv_adj_global < fdr_threshold) %>%
+      dplyr::filter(!!p_adj < fdr_threshold) %>%
       summarise(n_IgX = n_distinct(response),
                 n_IP = n_distinct(predictor),
                 # prop_igx = n_igx/unique(total_igx),

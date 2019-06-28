@@ -18,13 +18,14 @@ if (!"walltime" %in% names(resources)) {
 #SBATCH --ntasks=1
 
 
-<%= if (!is.null(resources$walltime)) sprintf(paste0("#SBATCH --time=", ceiling(resources$walltime / 60))) %>
+
 
 ## OLD if-statement structure
 ## <%= if (!is.null(resources$walltime)) { %>
 ## #SBATCH --time=<%= ceiling(resources$walltime / 60) %>
 ## <%= } %>
 
+<%= if (!is.null(resources$walltime)) sprintf(paste0("#SBATCH --time=", ceiling(resources$walltime / 60))) %>
 <%= if (!is.null(resources$ncpus)) sprintf(paste0("#SBATCH  --cpus-per-task=", resources$ncpus)) %>
 <%= if (!is.null(resources$memory)) sprintf(paste0("#SBATCH  --mem-per-cpu=", resources$memory)) %>
 <%= if (array.jobs) sprintf("#SBATCH --array=1-%i", nrow(jobs)) else "" %>

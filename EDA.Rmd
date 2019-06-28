@@ -220,6 +220,61 @@ setdiff(overlap_samples_raw, overlap_samples)
 
 ### IgX features
 
+#### Distribution of isotypes
+
+raw glycans
+
+```{r}
+names(glycans_trans_fam_adj) %>% 
+  keep(str_detect(.,pattern="IgG")) %>%
+  data.frame(igx=.) %>%
+  summarise(
+    nIgG1=sum(str_detect(igx,pattern = "IgGI1")),
+    nIgG2=sum(str_detect(igx,pattern = "IgGII1")),
+    nIgG4=sum(str_detect(igx,pattern = "IgGIV1"))
+  )
+```
+
+Normalised per experiment (IgX) and sample? -> does not seem the case
+
+```{r}
+
+glycans_raw_omfo %>% 
+  as_tibble() %>% 
+  .[,c(F,T,F,F,F,!derived_glycan_pos)] %>% 
+  tidyr::gather(glycan, value, -IID) %>% 
+  mutate(igx = ifelse(str_detect(glycan, "IgG"), "IgG", "IgA")) %>% 
+  group_by(IID,igx) %>% 
+  summarise(sample_exp_sum = sum(value,na.rm = TRUE)) %>% 
+  ggplot(aes(x=igx, y=sample_exp_sum))+
+  geom_boxplot()
+
+```
+
+If the measurements per sample are normalised per experiment, the sum over
+experiments should also be equal across samples. -> not the case
+
+```{r}
+
+glycans_raw_omfo[,-(1:5)] %>% 
+  as_tibble() %>% 
+  .[,!derived_glycan_pos] %>%
+  replaceMissing(0) %>% 
+  rowSums() %>% 
+  boxplot()
+
+```
+
+However, the normalisation need not be relative only to the peaks included in the dataset.
+There definitely does seem to be normalisation, since all features are in 0-100.
+
+```{r}
+glycans_raw_omfo[,-(1:5)] %>%
+  boxplot()
+```
+
+
+
 #### Missingness
 
 ##### Missing samples per feature
@@ -357,6 +412,12 @@ glycans_raw_o[,-(1:5)] %>%
 
 #### IgA
 
+Specifically, it would be good to have annotations at the level of IgA1 vs IgA2
+isoforms for the IgA glycans. For the glycans which are in the annotation file
+the IgA isoform is indicated, but because not all glycans in the study are in
+the annotation file, IgA isoform-level annotations cannot be taken forward
+when all IgA isoforms are to be analysed.
+
 ```{r}
 # in univariate results
 IgA_names_univar <- unique(ip_igx_univar_good$response) %>% .[!str_detect(., pattern = "IgG")]
@@ -443,6 +504,17 @@ length(union(IgA_names_univar_derived, IgA_anno_names_derived$feature))
 #### IgG
 
 52 IgG features, but no annotation available yet.
+
+All are IgGI/II/IV, there are no IgGIII glycans.
+Note IgIII has 1 addition N-glycosylation site (Maverakis et al., 2015).
+
+```{r}
+glycans_trans_fam_adj %>% names() %>% grep(pattern = "IgGI") %>% length()
+glycans_trans_fam_adj %>% names() %>% grep(pattern = "IgGII")%>% length()
+glycans_trans_fam_adj %>% names() %>% grep(pattern = "IgGIII")%>% length()
+glycans_trans_fam_adj %>% names() %>% grep(pattern = "IgGIV")%>% length()
+```
+
 
 ### Marginal distributions
 
@@ -535,14 +607,15 @@ Overview resolved issues:
 
 * 'xxx.new' in set_name column -> all have source=="P6 newB" -> corresponds to new gating strategy for B cells (cf Mangino2017, section "Selection of traits and modelling influences", numbers match exactly) -> exclude old P6 features
 * duplicated subset_names? -> when different plates contains same markers at the top of the hierarchy
+* lineage "04-Aug" -> meaning? + inconsistent coding in subset_name column ("4-8")
+    - is this some autoformat issue?
+* NAs in QC columns for plate 6
 
 Overview open issues:
 
 * "(Ignore)" in canonical_name_x column -> meaning?
-* lineage "04-Aug" -> meaning? + inconsistent coding in subset_name column ("4-8")
-    - is this some autoformat issue?
 * lower-level parent lineages -> mean_value =100% -> where as proportion of higher-level (i.e. containing) lineage?
-* NAs in QC columns for plate 6
+
 
 ##### Parent lineage
 
@@ -1184,6 +1257,25 @@ grid.draw(venn)
 ```
 
 
+## Dimensions of final analytic dataset
+
+```{r}
+
+dim(ips_raw_omfo)
+head(names(ips_raw_omfo))
+dim(ips_trans_fam_adj)
+
+ip_anno_dt[set_name %in% names(ips_trans_fam_adj), table(source)]
+
+dim(glycans_raw_omfo)
+head(names(glycans_raw_omfo))
+dim(glycans_trans_fam_adj)
+
+names(glycans_trans_fam_adj) %>% str_detect("IgG") %>% table(.)
+
+```
+
+
 ## Batch effects/global differences between samples
 
 see notes 30/04: concern is any sample-specific biases, but plate/batch is only available metadata to study these -> focus on batch effects
@@ -1518,7 +1610,7 @@ ip_batch[ips_raw_omfo, on=.(IID),nomatch=0] %>% dim
 
 ```
 
-Sample with IID 99611 and 99612 have different FID in ips_raw vs ip_batch!
+Samples with IID 99611 and 99612 have different FID in ips_raw vs ip_batch!
 
 ```{r}
 
@@ -1554,9 +1646,7 @@ sum(test_bad$FID == 9960)
 sum(test_bad$FID == 9961)
 ```
 
-However, to be save, exclude IID 99611 and 99612 from the analysis.
-
-
+However, to be safe, exclude IID 99611 and 99612 from the analysis.
 
 ```{r}
 
@@ -1807,6 +1897,7 @@ p_lin_source_IgX_enrich
     - problem MZ&DZ treated the same
     - kinship2::kinship + coxme::lmekin 
         +for historical remarks about the libraries see https://cran.r-project.org/web/packages/coxme/vignettes/lmekin.pdf
+  Remark: 
 * explicitly model family structure to calculate correlations
 * use PopPAnTe? IF variables in regression are on same scale, correlation coefficient = regression coefficient (https://en.wikipedia.org/wiki/Simple_linear_regression#Fitting_the_regression_line)
     + links to question of quantile-normalisation (see above, batch effects)

@@ -3,11 +3,22 @@
 # set options
 options(clustermq.scheduler = "multicore")
 
+
 source(here::here("src/imports.R"))
 source(here::here("src/source_local_functions.R"))
 source(here::here("src/dir_defs.R"))
 source(here::here("src/my_drake_plan.R"))
 # source(here::here())
+
+# future::plan(
+#   list(
+#     # future::multisession,
+#     # future::sequential,
+#     future::tweak(future.callr::callr),
+#     future::tweak(future.callr::callr, workers = 3L)
+#     # future::tweak(future.callr::callr)
+#   )
+# )
 
 # see https://ropenscilabs.github.io/drake-manual/hpc.html#parallel-computing-within-targets
 # furrr recommends (https://davisvaughan.github.io/furrr/index.html):
@@ -19,16 +30,18 @@ source(here::here("src/my_drake_plan.R"))
 
 # graph of workflow
 config <- drake_config(plan)
-vis_drake_graph(config)
+# vis_drake_graph(config)
 
 # make(plan)
 make(plan,  
      parallelism = "clustermq",
-     jobs =3,
+     # parallelism = "future",
+     jobs =10,
      jobs_preprocess=4,
-     prework = list(quote(future::plan(future.callr::callr, workers=3L)),
-                    quote(options(future.globals.maxSize =  4*1024^3))),
-     cache_log_file = TRUE,
+     verbose = 2,
+     # prework = list(quote(future::plan(future.callr::callr, workers=2L)),
+     #                quote(options(future.globals.maxSize =  4*1024^3))),
+     # cache_log_file = TRUE,
      keep_going = FALSE)
 
 # reason for passing future.globals.maxSize:  # 4GB  https://github.com/HenrikBengtsson/future/issues/185

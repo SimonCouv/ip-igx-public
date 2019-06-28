@@ -13,7 +13,8 @@ plan = drake_plan(
   ip_anno = fread(file_in("input_data/data_annotations/all_immunophenotypes_annotation_av.csv")) %>%
     mutate_all(na_if, y="") %>%   # set all empty string fields to NA 
     set_names(names(.) %>% tolower(.) %>% str_replace_all(., c( "\\.$"="", "[\\.]+"="_", " "="_"))) %>%
-    mutate(composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage)),
+    mutate(lineage=recode(lineage, `04-Aug`="4-8"),
+           composite_lin_source = ifelse((source=="Lin"|source=="MFI"), source, lineage)),
   ip_anno_dt = as.data.table(ip_anno),
   IgA_anno_names_raw = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "raw_names"),
   IgA_anno_names_derived = readxl::read_xlsx(file_in("input_data/data_annotations/IgA_explanatory_overview.xlsx"), sheet = "derived_names"),
@@ -24,8 +25,10 @@ plan = drake_plan(
   
   # intersect 
   
-  overlap_samples_raw = intersect(glycans_raw$IID, ips_raw$IID),
-  overlap_samples = intersect(glycans$IID, ips$IID),
+  overlap_samples_raw = setdiff(intersect(glycans_raw$IID, ips_raw$IID), 
+                                c(99611, 99612)),   # see EDA.Rmd, Section batch effects -> IPs -> Experimental design
+  overlap_samples = setdiff(intersect(glycans$IID, ips$IID),
+                            c(99611, 99612)),   # see EDA.Rmd, Section batch effects -> IPs -> Experimental design
   
   glycans_o = glycans[glycans$IID %in% overlap_samples,],
   glycans_raw_o = glycans_raw[glycans_raw$IID %in% overlap_samples_raw,],
@@ -84,6 +87,9 @@ plan = drake_plan(
   ips_omfo = ips_omf[ips_omf$IID %in% overlap_omf_samples,],
   ips_raw_omfo = ips_raw_omf[ips_raw_omf$IID %in% overlap_omf_samples_raw],
   
+  #for descriptive stats
+  ip_batch_omfo = ip_batch[ip_batch$IID %in% overlap_omf_samples_raw,],
+  
   #  transform features -------------------------------------------
   #  (min-max) -> arcsin(sqrt) -> scale -> QN
   
@@ -105,32 +111,13 @@ plan = drake_plan(
   # Relatedness adjustment -------------------------------------------
   
   # glycans
-  # glycans_fam_adj = lmer_adjust(
-  #   raw = glycans_raw_omfo,
-  #   factor_cols = c("FID","IID","Plate_NO","Sex"),
-  #   covar_pos = 1:5,
-  #   form=feat ~ (1|FID) + Plate_NO + Age
-  # ),
-  
   glycans_trans_fam_adj = lmer_adjust(
     raw = glycans_raw_omfo_trans,
     factor_cols = c("FID","IID", "Sex"),
     covar_pos = 1:5,
     form=feat ~ (1|FID) + Age # don't adjust for plate, as no longer strong batch effect after QN (see gPCA)
   ),
-  
-  # glycan_residuals_pdf = make_marginal_plots(glycans_fam_adj, fig_path = file_out("results/figures/glycan_res_marginal_plots.pdf")),             # diagnostic of LME models
-  
-  # test within-target parallelism
-  par_dummy = call_future(),
-  
-  # # IPs
-  # ips_fam_adj = lmer_adjust(
-  #   raw = ip_batch[ips_raw_omfo, on=.(FID, IID),nomatch=0],
-  #   factor_cols = c("batch", "FID", "IID"),
-  #   covar_pos = 1:4,
-  #   form=feat ~ (1|FID) + batch + age),
-  
+
   ips_trans_fam_adj_l = lmer_adjust_list(
     raw = ip_batch[ips_raw_omfo_trans, on=.(FID, IID),nomatch=0],
     factor_cols = c("batch", "FID", "IID"),
@@ -141,6 +128,10 @@ plan = drake_plan(
     fam_adj_l=ips_trans_fam_adj_l,
     raw=ip_batch[ips_raw_omfo_trans, on=.(FID, IID),nomatch=0]),
   
+  ips_trans_fam_adj_tsv = write_tsv(
+    ips_trans_fam_adj,
+    path = file_out("data/ips_trans_fam_adj.tsv"),
+    col_names = TRUE),
   
   # data exploration -------------------------------------------
   # IP mean per-feature relative counts
@@ -169,9 +160,9 @@ plan = drake_plan(
   glycans_scaled_ncomp = future_map(.x = list(
     "raw" = scale(glycans_raw_omfo[,-(1:5)]),
     "corr" = scale(glycans_omfo[,-(1:5)]), 
-    "qn" = glycans_raw_omfo_qn[,-(1:5)],
-    "famadj" = scale(glycans_fam_adj),
-    "qn_famadj" = glycans_qn_fam_adj),         # scale input
+    "qn" = glycans_raw_omfo_trans[,-(1:5)],
+    # "famadj" = scale(glycans_fam_adj),
+    "qn_famadj" = glycans_trans_fam_adj),         # scale input
   .f = estim_ncpPCA,
   ncp.max = 15, 
   ncp.min = 0, 
@@ -184,9 +175,9 @@ plan = drake_plan(
       .x =  list(
         "raw" = scale(glycans_raw_omfo[,-(1:5)]),
         "corr" = scale(glycans_omfo[,-(1:5)]), 
-        "qn" = glycans_raw_omfo_qn[,-(1:5)],
-        "famadj" = scale(glycans_fam_adj),
-        "qn_famadj" = glycans_qn_fam_adj),
+        "qn" = glycans_raw_omfo_trans[,-(1:5)],
+        # "famadj" = scale(glycans_fam_adj),
+        "qn_famadj" = glycans_trans_fam_adj),
       ~as.data.frame(scale(.x))),                    #scale input IF not already scaled
     .y = map(glycans_scaled_ncomp, "ncp"),
     .f = function(x,y,...){imputePCA(X=x,ncp=y,...)},
@@ -199,9 +190,9 @@ plan = drake_plan(
     .x = list(
       "raw" = glycans_raw_omfo[,-(1:5)],
       "corr" = glycans_omfo[,-(1:5)], 
-      "qn" = glycans_raw_omfo_qn[,-(1:5)],
-      "famadj" = glycans_fam_adj,
-      "qn_famadj" = glycans_qn_fam_adj),
+      "qn" = glycans_raw_omfo_trans[,-(1:5)],
+      # "famadj" = glycans_fam_adj,
+      "qn_famadj" = glycans_trans_fam_adj),
     .f = ~map(.x, function(x){x[is.na(x)]<- mean(x, na.rm=TRUE); x}) %>% 
       as_tibble()
   ),
@@ -211,18 +202,18 @@ plan = drake_plan(
     raw_df_l = list(
       "raw" = scale(glycans_raw_omfo[,-(1:5)]),
       "corr" = scale(glycans_omfo[,-(1:5)]), 
-      "qn" = glycans_raw_omfo_qn[,-(1:5)],
-      "famadj" = scale(glycans_fam_adj),
-      "qn_famadj" = glycans_qn_fam_adj),
+      "qn" = glycans_raw_omfo_trans[,-(1:5)],
+      # "famadj" = scale(glycans_fam_adj),
+      "qn_famadj" = glycans_trans_fam_adj),
     imputed_df_l = map(glycans_scaled_riPCA_imp, "completeObs")
   ),
   
   p_mean_input_impute_comparison = compare_input_imputed(
     raw_df_l = list("raw" = glycans_raw_omfo[,-(1:5)],
               "corr"= glycans_omfo[,-(1:5)],
-              "qn"= glycans_raw_omfo_qn[,-(1:5)],
-              "famadj"= glycans_fam_adj,
-              "qn_famadj" =  glycans_qn_fam_adj),
+              "qn"= glycans_raw_omfo_trans[,-(1:5)],
+              # "famadj"= glycans_fam_adj,
+              "qn_famadj" =  glycans_trans_fam_adj),
     imputed_df_l = glycans_mean_imp
   ),
   
@@ -233,8 +224,8 @@ plan = drake_plan(
       .x = glycans_scaled_riPCA_imp,
       .y = list(glycans_raw_omfo,
                 glycans_omfo,
-                glycans_raw_omfo_qn,
-                glycans_raw_omfo,
+                glycans_raw_omfo_trans,
+                # glycans_raw_omfo,
                 glycans_raw_omfo),
       .f = function(x,y){cbind(y[, 'Plate_NO'], x$completeObs)}
     ),
@@ -250,8 +241,8 @@ plan = drake_plan(
       .x = map(glycans_mean_imp, ~scale(.x)),
       .y = list(glycans_raw_omfo,
                 glycans_omfo,
-                glycans_raw_omfo_qn,
-                glycans_raw_omfo,
+                glycans_raw_omfo_trans,
+                # glycans_raw_omfo,
                 glycans_raw_omfo),
       .f = function(x,y){cbind(y[, 'Plate_NO'], x)}
     ),
@@ -266,8 +257,8 @@ plan = drake_plan(
     .x = map(glycans_mean_imp, ~scale(.x)),  #scale inputs to give same weight
     .y = list(glycans_raw_omfo,
               glycans_omfo,
-              glycans_raw_omfo_qn,
-              glycans_raw_omfo,
+              glycans_raw_omfo_trans,
+              # glycans_raw_omfo,
               glycans_raw_omfo),
     .f = function(x,y,...){
       gPCA.batchdetect(x=x, batch=y$Plate_NO)
@@ -282,8 +273,8 @@ plan = drake_plan(
     .x = glycans_scaled_riPCA_imp,  #already scaled prior to imputation
     .y = list(glycans_raw_omfo,
               glycans_omfo,
-              glycans_raw_omfo_qn,
-              glycans_raw_omfo,
+              glycans_raw_omfo_trans,
+              # glycans_raw_omfo,
               glycans_raw_omfo),
     .f = function(x,y,...){
       gPCA.batchdetect(x=x$completeObs, batch=y$Plate_NO)
@@ -294,6 +285,72 @@ plan = drake_plan(
     seed=5
   ),
   
+  
+  # batch effects: IPs ---------------------------------------------------------
+  # only use mean-impute
+
+  # mean-impute 
+  # ips_scaled_imp = future_map(
+  #   .x =  list("raw" = ips_raw_omfo[,-(1:2)],
+  #          "corr" = ips_omfo[,-(1:2)],
+  #          "qn" = ips_raw_omfo_qn[,-(1:2)],
+  #          "famadj" = ips_fam_adj,
+  #          "qn_famadj" = ips_qn_fam_adj),
+  #   .f = ~map(.x, function(x){x[is.na(x)]<- mean(x, na.rm=TRUE); x}) %>% 
+  #     as_tibble()
+  # ),
+  
+  # # impute using optimal number of PCs, without prior scaling
+  # glycans_imp = future_map2(
+  #   .x = map(
+  #     .x = list("raw" = glycans_raw_omfo[,-(1:5)],
+  #          "corr" = glycans_omfo[,-(1:5)], 
+  #          "qn" = glycans_raw_omfo_qn[,-(1:5)],
+  #          "famadj" = glycans_fam_adj,
+  #          "qn_famadj" = glycans_trans_fam_adj),
+  #     ~as.data.frame(.x)),                    # do NOT scale input
+  #   .y = map(glycans_scaled_ncomp, "ncp"),
+  #   .f = function(x,y,...){imputePCA(X=x,ncp=y,...)},
+  #   scale=TRUE,  # use internal scaling
+  #   method="Regularized"
+  # ),
+  # 
+  # # standard PCA on imputed datasets, on scaled data
+  # glycans_scaled_pca = future_map2(
+  #   .x = map2(
+  #     .x = glycans_scaled_riPCA_imp,
+  #     .y = list(glycans_raw_omfo,
+  #             glycans_omfo,
+  #             glycans_raw_omfo_qn,
+  #             glycans_raw_omfo,
+  #             glycans_raw_omfo),
+  #     .f = function(x,y){cbind(y[, 'Plate_NO'], x$completeObs)}
+  #   ),
+  #   .y = map(glycans_scaled_ncomp, "ncp"),
+  #   .f =  function(x,y,...){FactoMineR::PCA(X = x, ncp = y, ...)},
+  #   quali.sup = 1,
+  #   graph = FALSE
+  # ),
+  # 
+  # # formal test (Reese2013)
+  # glycans_gPCA = future_map2(
+  #   .x = glycans_scaled_riPCA_imp,
+  #   .y = list(glycans_raw_omfo,
+  #             glycans_omfo,
+  #             glycans_raw_omfo_qn,
+  #             glycans_raw_omfo,
+  #             glycans_raw_omfo),
+  #   .f = function(x,y,...){
+  #     gPCA.batchdetect(x=x$completeObs, 
+  #                      batch=y$Plate_NO)
+  #   },
+  #   center = TRUE,  # data is centered [counter-intuitive parameter name, see ?gPCA.batchdetect]
+  #   scaleY = TRUE,  # adjust for unequal batch sizes
+  #   nperm=20000,
+  #   seed=5
+  # ),
+  
+
   # Univariate analysis  -------------------------------------------
   
   # QC filter + FDR
@@ -347,56 +404,314 @@ plan = drake_plan(
   scale_free_common_pars = list(verbose= 0,  moreNetworkConcepts = TRUE, powerVector = scale_free_powers),
   scale_free_iter_pars = expand.grid(networktype = c('signed', 'signed hybrid', 'unsigned'),
                                      corFnc = c('cor', 'bicor'),
-                                     stringsAsFactors = FALSE),
+                                     stringsAsFactors = FALSE) %>% 
+    as_tibble() %>% 
+    left_join(tibble(corFnc = c('cor', 'cor','bicor'),
+                         corOptions = list(list(use="p"),
+                                           list(use="p", method="spearman"),
+                                           list(use="p"))),
+              by="corFnc"),
   
   derived_glycan_pos = str_detect(names(glycans_trans_fam_adj), pattern = "_"),
-  glycans_scale_free = optimize_network_pars(data=glycans_trans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
-  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_trans_fam_adj[, -!derived_glycan_pos], scale_free_common_pars, scale_free_iter_pars, scale_free_powers, plt_title = "glycans"),
+  glycans_scale_free = optimize_network_pars(data=glycans_trans_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, plt_title = "glycans"),
+  glycans_scale_free_noderiv = optimize_network_pars(data=glycans_trans_fam_adj[, -!derived_glycan_pos],common_pars = scale_free_common_pars, pars =scale_free_iter_pars, plt_title = "glycans"),
   
   # 2. parameter search ~ modularity
   
-  glycan_cross_iter_pars = list(figdir = "results/figures/WGCNA_pars/glycans/"),
+  # parameters 
   
-  glycan_network_pars = read_tsv(file_in("WGCNA_parameters/glycan_pars_qn_famadj.tsv")) %>%
-    dplyr::select(-aim),
-  glycan_cut_pars = expand.grid(deep =c(4, 1),
-                                minModuleSize=c(3,5,10,20)),
+  glycan_network_pars = read_tsv(file_in("WGCNA_parameters/glycan_pars_trans.tsv")) %>%
+    dplyr::select(-aim) %>% 
+    group_by(corfnc, networktype, method) %>% 
+    summarise(powers=list(softpower)),
+  glycan_network_pars_noderiv = read_tsv(file_in("WGCNA_parameters/glycan_pars_trans_noderiv.tsv")) %>%
+    dplyr::select(-aim) %>% 
+    group_by(corfnc, networktype, method) %>% 
+    summarise(powers=list(softpower)),
   glycan_modality = ifelse(str_detect(names(glycans_trans_fam_adj), pattern = "IgG"),"IgG","IgA"),
   
-  glycan_module_stats = wgcna_parameter_search(data=glycans_trans_fam_adj,
-                                               glycan_network_pars, 
-                                               glycan_cut_pars,
-                                               glycan_cross_iter_pars, 
-                                               create_plot = TRUE,
-                                               feat_modality=glycan_modality),
-  glycan_module_stats_noderiv = wgcna_parameter_search(data=glycans_trans_fam_adj[,!derived_glycan_pos],
-                                                       glycan_network_pars, 
-                                                       glycan_cut_pars,
-                                                       glycan_cross_iter_pars, 
-                                                       create_plot = TRUE,
-                                                       feat_modality=glycan_modality[!derived_glycan_pos]),
+  # module-parameter search
   
-  network_module_heatmaps = make_module_heatmap_pdf(plots = glycan_module_stats$plots,
-                                                    file_path = file_out("results/figures/WGCNA_pars/glycans/overview.pdf"),
-                                                    pointsize = 2,
-                                                    width = 10,
-                                                    height=10,
-                                                    network_pars = glycan_network_pars),
+  # impute for calculation of PC1s
+  # 
+  # impute in sample space (via t()), so as not to induce strong correlations
+  # between features based only on correlation on a small subset of samples 
+  # (given that currently up to 20% feature missingness is allowed)
+  # 
+  # use pre-imputed df, so imputation (in sample space) takes all features into account, 
+  # not only the features in the modules (as is the case for internal knn.impute 
+  # in WGCNA::moduleEigengenes). This assures that PC1 can always be used, 
+  # therefore the interpretation is the same for the representatives of all 
+  # modules (NOT: some representatives are PC1s, some are hubGenes)
+  glycans_trans_fam_adj_kkn_imp = t(impute::impute.knn(t(as.matrix(glycans_trans_fam_adj)),
+                                                   rowmax = 0.6)$data),
   
-  network_module_heatmaps_noderiv = make_module_heatmap_pdf(plots = glycan_module_stats_noderiv$plots,
-                                                            file_path = file_out("results/figures/WGCNA_pars/glycans/overview_noderiv.pdf"),
-                                                            pointsize = 2,
-                                                            width = 10,
-                                                            height=10,
-                                                            network_pars = glycan_network_pars),
+  p_knn_input_impute_comparison = compare_input_imputed(
+    raw_df_l = list(glycans_trans_fam_adj),
+    imputed_df_l = list(glycans_trans_fam_adj_kkn_imp)
+  ),
   
-  glycan_modularity_overview = write_csv(glycan_module_stats$modularity_overview, path = file_out("results/modularity_overview.csv")),
-  glycan_modularity_overview_noderiv = write_csv(glycan_module_stats_noderiv$modularity_overview, path = file_out("results/modularity_overview_noderiv.csv")),
+  glycan_modules = pmap(
+    .l = glycan_network_pars,
+    .f = wgcna_parameter_search,
+    data=glycans_trans_fam_adj,
+    cut_pars=expand.grid(deep =c(4, 1),
+                         minModuleSize=c(3,5,10,20)),
+    create_plot = TRUE,
+    feat_modality=glycan_modality
+  ),
   
-  # Immunophenotypes
-  # ips_scale_free = optimize_network_pars(data=glycans_qn_fam_adj, common_pars = scale_free_common_pars, pars = scale_free_iter_pars, powers = scale_free_powers, plt_title = "glycans"),
+  glycan_modules_df = wrangle_glycan_module_df(
+    modules = glycan_modules,
+    network_pars = glycan_network_pars,
+    dat = glycans_trans_fam_adj_kkn_imp
+  ),
   
+  glycan_modules_noderiv = pmap(
+    .l = glycan_network_pars_noderiv,
+    .f = wgcna_parameter_search,
+    data=glycans_trans_fam_adj[,!derived_glycan_pos],
+    cut_pars=expand.grid(deep =c(4, 1),
+                         minModuleSize=c(3,5,10,20)),
+    create_plot = TRUE,
+    feat_modality=glycan_modality[!derived_glycan_pos]
+  ),
   
+  glycan_modules_df_noderiv = wrangle_glycan_module_df(
+    modules = glycan_modules_noderiv,
+    network_pars = glycan_network_pars_noderiv,
+    dat = glycans_trans_fam_adj_kkn_imp[,!derived_glycan_pos]
+  ),
+  
+  glycans_mod_varExpl_plots = modularity_varExpl_plots(glycan_modules_df_noderiv, 
+                                                        varExpl_trh = 0.5,
+                                                        ncol=1),  # for report
+
+  glycan_select_scores = glycan_modules_df_noderiv %>% 
+    unnest(cut_stats) %>% 
+    unnest(module_stats)  %>% 
+    dplyr::filter(
+      corfnc=="bicor",
+      networktype=="signed_hybrid",
+      powers==6,
+      cut==3
+    ) %>% 
+    dplyr::select(colors, score) %>%
+    spread(colors,score) %>% 
+    map(unlist) %>% 
+    as_tibble(),
+  
+  glycan_select_scores_tsv = write_tsv(
+    glycan_select_scores,
+    path = file_out("data/glycan_select_scores.tsv")
+  ),
+  
+  glycan_select_module_anno = read_tsv(
+    file_in("WGCNA_parameters/glycan_modules_anno_bicor_signed-hybrid_power6_cut3.tsv")
+  ),
+  
+
+  
+  # glycans modules - IPs -------------------------------------------
+  glycan_modules_cor_ips = cor_p_bh(
+    x = glycan_select_scores,
+    y = ips_trans_fam_adj,
+    method="pearson",
+    use="pairwise.complete.obs"
+  ),
+  
+  # annotate with subgroups of IgX and IP
+  glycan_modules_cor_ips_anno = glycan_modules_cor_ips %>%
+    left_join(ip_anno %>% 
+                dplyr::select(set_name, subset_name, composite_lin_source), 
+              by=c("IP"="set_name")) %>% 
+    left_join(glycan_select_module_anno, by="glycan_module") %>% 
+    dplyr::select(module_tag,n, igx, site, chain, subset_name, 
+                  composite_lin_source, correlation, p.val, p.val_bh, p.val_storey, 
+                  everything()),
+  
+  glycan_modules_cor_ips_anno_tsv =  write_tsv(
+    glycan_modules_cor_ips_anno,
+    path = file_out("data/glycan_modules_cor_ips_anno.tsv")
+  ),
+  
+  #qq plot
+  igx_mod_ips_qq = make_univar_qq(v_pval = glycan_modules_cor_ips$p.val, fig_path = file_out("results/figures/igx_mods_ips_qqplot.png")),
+
+  # top association scatter plots pdf
+  # top_assoc_scatter_pdf = make_top_assoc_scatters(ntop = 100, glycan_modules_cor_ips_anno, glycan_select_scores, ips_trans_fam_adj, file_path = file_out("results/figures/igx_modules_ips_top_assoc_scatters.pdf")),
+
+  # number of significant IgG, IgA and IP ~ FDR threshold
+  igx_mod_ips_n_associated_m = get_fdr_nfeat_associated_univar_igx_mods(
+    fdr_thresholds = seq(0,1,0.0005),
+    data = glycan_modules_cor_ips_anno,
+    p_adj="p.val_storey"
+  ),
+
+  # enrichment analyses:
+  igx_mod_ips_target_indices = unique(floor(10^seq(0,log10(nrow(glycan_modules_cor_ips)), length.out = 1e4))),
+
+  # cumulative mean number of IgG among top associated IgX
+  igx_mod_ips_running_IgG_perc =  cummean(str_detect(glycan_modules_cor_ips$glycan_module, pattern = "G")),
+
+  # enrichment of lin_sources ~ FDR
+  # igx_mod_ips_lin_source_props_df = get_lin_source_props_igx_mod_ips(
+  #   target_indices=glycan_modules_cor_ips_anno,
+  #   data=glycan_modules_cor_ips_anno,
+  #   ip_anno=ip_anno),
+  
+  # enrichment of lin_sources ~ FDR+IgX
+  # igx_mod_ips_lin_source_IgX_props_df = get_lin_source_props_byIgX_igx_mod_ips(
+  #   target_indices=igx_mod_ips_target_indices,
+  #   data=glycan_modules_cor_ips_anno,
+  #   igx_var = igx),
+  
+  # WGCNA IPs -------------------------------------------
+  
+  #from DTR cluster
+  ip_module_stats = readRDS(file_in("data/ip_module_stats_combined.RDS")),
+  
+  ips_trans_fam_adj_knn_imp = t(impute::impute.knn(t(as.matrix(ips_trans_fam_adj)),
+                                                   rowmax = 0.6)$data),
+  
+  ip_modules_df = wrangle_ip_module_df(
+    ip_module_stats_df = ip_module_stats,
+    dat = ips_trans_fam_adj_knn_imp
+  ),
+  
+  IP_mod_varExpl_plots = modularity_varExpl_plots(ip_modules_df, 
+                                                  varExpl_trh = 0.5,
+                                                  ncol=1),
+  
+  ip_select_modules = ip_modules_df %>% 
+    unnest(cut_stats) %>% 
+    unnest(module_stats)  %>% 
+    dplyr::filter(
+      corfnc=="spear",
+      networktype=="signed_hybrid",
+      powers==5,
+      cut==8
+    ),
+  
+  ip_select_scores = ip_select_modules %>% 
+    dplyr::select(colors, score) %>%
+    spread(colors,score) %>% 
+    map(unlist) %>% 
+    as_tibble(),
+  
+  ip_select_scores_tsv = write_tsv(
+    ip_select_scores,
+    path = file_out("data/ip_select_scores.tsv")
+  ),
+  
+  ip_select_PC1_cor_tmp = ip_modules_df %>% 
+    unnest(cut_stats) %>% 
+    dplyr::filter(
+      corfnc=="spear",
+      networktype=="signed_hybrid",
+      powers==5,
+      cut==8
+    ) %>% 
+    unnest(feature_stats) %>% 
+    dplyr::filter(colors!="grey") %>% 
+    dplyr::select(feat, colors) %>%
+    mutate(
+      PC1_cor = calc_PC1_cor(IP=feat, 
+                             color=colors,
+                             ip_select_scores=ip_select_scores,
+                             ips_trans_fam_adj=ips_trans_fam_adj,
+                             use="p",
+                             method="pearson")
+    ) %>% 
+    left_join(ip_anno %>% 
+                dplyr::select(set_name, subset_name, composite_lin_source), 
+              by=c("feat"="set_name")) %>% 
+    nest(-colors, .key = "feature_data")%>% 
+    dplyr::filter(colors!="grey"),
+  
+  # split up long calculation as multiple targets, see drake manual, section large plans
+  # more efficient than using within-target parallelism
+  core_CD_df_sliced = target(
+    parse_ip_subsets_helper(
+      x=ip_select_PC1_cor_tmp,
+      ips_trans_fam_adj = ips_trans_fam_adj),
+    transform=split(ip_select_PC1_cor_tmp, slices=6)
+  ),
+  
+  core_CD_df = target(
+    c(core_CD_df_sliced),
+    transform=combine(core_CD_df_sliced)
+  ),
+  
+  ip_select_PC1_cor= ip_select_PC1_cor_tmp %>%
+    mutate(
+      core_CD_df = core_CD_df,
+      feature_core_data = map2(
+        feature_data,
+        core_CD_df,
+        ~left_join(.x,
+                   .y %>% 
+                     unnest(.sep="_") %>%
+                     dplyr::select(-CD_table_equiv_feat) %>%
+                     set_names(str_remove(names(.), pattern="CD_table_")),
+                   # dplyr::rename("feat"="CD_table_feat"),
+                   by=c("feat", "composite_lin_source"))  #mind that features in core_CD_df are subset of those in feature_data
+      )
+    ) %>%
+    dplyr::select(-one_of(c("feature_data", "core_CD_df"))),
+  
+  ip_select_module_anno =ip_modules_df %>% 
+    unnest(cut_stats) %>% 
+    dplyr::filter(
+      corfnc=="spear",
+      networktype=="signed_hybrid",
+      powers==5,
+      cut==8
+    ) %>% 
+    unnest(feature_stats) %>% 
+    left_join(ip_anno %>% 
+                dplyr::select(set_name, subset_name, composite_lin_source), 
+              by=c("feat"="set_name")) %>% 
+    count(colors, composite_lin_source) %>% 
+    group_by(colors) %>% 
+    mutate(module_size = sum(n),
+           n_source = n_distinct(composite_lin_source),
+           prop = n/module_size, 
+           source_label = sprintf("%s(%s%%)", composite_lin_source, round(prop*100))) %>% 
+    dplyr::filter(prop>0.05 & colors!="grey") %>% 
+    arrange(desc(prop)) %>% 
+    summarise(label_perc = paste0(source_label, collapse = "_"),
+              label = paste0(composite_lin_source, collapse = "_"),
+              label_major = composite_lin_source[which.max(prop)],
+              module_size=unique(module_size),
+              max_prop = max(prop),
+              n_source = n_distinct(composite_lin_source)
+    ) %>% 
+    arrange(desc(module_size)) %>% 
+    mutate(module_tag = paste0("I", 1:nrow(.))) %>% 
+    left_join(dplyr::select(ip_select_modules,colors, varExplained), ., by="colors") %>% 
+    left_join(ip_select_PC1_cor, by="colors"),
+  
+  # glycans modules - WGCNA modules -------------------------------------------
+  glycan_modules_cor_ips_modules = cor_p_bh(
+    x = glycan_select_scores,
+    y = ip_select_scores,
+    xname="glycan_module",
+    yname="IP_module",
+    method="pearson",
+    use="pairwise.complete.obs"
+  ),
+  
+  glycan_modules_cor_ips_modules_anno = glycan_modules_cor_ips_modules %>%
+    left_join(dplyr::select(ip_select_module_anno, colors, 
+                            varExplained_IP=varExplained, label_perc, label_major, 
+                            module_size, module_tag, IP_feature_core_data=feature_core_data),
+              by=c("IP_module"="colors")) %>% 
+    left_join(glycan_select_module_anno, by="glycan_module", suffix=c("_IP", "_glycan")) %>% 
+    dplyr::select(module_tag_glycan, igx, site, fucose, sialic_acid, hexose,
+                  module_tag_IP, label_perc, IP_feature_core_data, p.val_storey,
+                  correlation, p.val, p.val_bh, module_size_glycan=n, module_size_IP=module_size,
+                  everything()),
   
   # generate report -------------------------------------------
   
@@ -410,4 +725,13 @@ plan = drake_plan(
   #   ),
   #   trigger = trigger(change = digest(file.info(file_in("results/figures/univar_qqplot.png"))))  # problem: seems to interfere with automatic dependency detection in Rmd
   # )
+  result_report = target(
+    command = rmarkdown::render(
+      knitr_in("cor_WGCNA.Rmd"),
+      output_file = file_out(here::here("results/cor_WGCNA.html")),
+      quiet = TRUE
+    )
+  )
+  
+  
 )

@@ -1,12 +1,30 @@
-library(future.batchtools, quietly=TRUE, warn.conflicts=FALSE, verbose=FALSE)
-
-future::plan(batchtools_slurm, template = "src/slurm_batchtools.tmpl")
-# future::plan(batchtools_slurm, template = "src/slurm_batchtools.tmpl", stdout=NA)
-
 source("src/imports_slurm.R")
 source("src/source_local_functions.R")
 
-ip_network_pars <- read_tsv(file_in("WGCNA_parameters/ip_pars_parsimonious.tsv")) %>% 
+# https://github.com/HenrikBengtsson/future/issues/244
+cl_login <- makeClusterPSOCK(
+  workers = "login1.rosalind.kcl.ac.uk", 
+  outfile = NULL, 
+  verbose = TRUE, 
+  homogeneous=TRUE,
+  # rscript = c("module", "load", "general/R/3.5.0;", "Rscript"), 
+  user = "k1893262",
+  # rshcmd = "/usr/bin/ssh",
+  # rshopts = c("-i /home/simon/.ssh/rosalind/rosalind"),
+  revtunnel=TRUE,
+  manual=FALSE
+)
+future::plan(
+  list(
+    future::tweak(future::cluster, workers=cl_login),
+    future::tweak(future.batchtools::batchtools_sge, template = "/users/k1893262/brc_scratch/twinsuk/ip-igx/src/sge_gradual.tmpl")
+  )
+)
+
+
+
+ip_network_pars <- read_tsv(file_in("WGCNA_parameters/ip_pars.tsv")) %>% 
+  # ip_network_pars <- read_tsv(file_in("WGCNA_parameters/ip_pars_parsimonious.tsv")) %>% 
   dplyr::rename("nwtype"="networktype") %>%
   mutate(
     corr_like = paste0("ips_",dplyr::recode(corfnc, cor="pearson", spearman = "spear")),
@@ -21,14 +39,21 @@ source("src/drake_plan_slurm.R")
 # config_slurm <- drake_config(plan_slurm)
 # vis_drake_graph(config_slurm)
 
-make(plan_slurm, 
-     parallelism = "future", 
-     jobs = 20,
-     jobs_preprocess = 2,
-     keep_going=TRUE,
-     memory_strategy = "speed",
-     caching = "worker"  # ESSENTIAL, otherwise import (reading) of objects is sequential (because performed by single master process), and becomes the bottleneck with large objects
-     )
+drake::make(plan_slurm,
+            parallelism = ssh_backend_future,
+            cache=drake_cache("/mnt/lustre/users/k1893262/twinsuk/ip-igx/.drake"),
+            jobs = 20,
+            jobs_preprocess = 2,
+            memory_strategy = "speed",
+            verbose = 1,
+            retries=3,
+            caching = "worker"  # ESSENTIAL, otherwise import (reading) of objects is sequential (because performed by single master process), and becomes the bottleneck with large objects
+)
+
+# make(plan_slurm, 
+#      parallelism = "future", 
+#      verbose = 2
+# )
 
 
 # notes on logging/capturing stdout and stderr --------------------
